@@ -44,6 +44,7 @@ import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.sql.Timestamp;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
@@ -280,7 +281,9 @@ public abstract class FacadeTransaction<T> {
                     procesaDestino.setIdgrupo(aOrigen.getIdgrupo());
                     procesaDestino.setIdsocio(aOrigen.getIdsocio());
                     procesaDestino.setCargoabono(1);
-                    procesaDestino.setIdcuenta("20407160101067");//Falta parametrizarla
+                    //Busco la cuenta spei en tablas
+                    Tablas tb_spei_cuenta=util2.busquedaTabla(em,"bankingly_banca_movil","cuenta_spei");
+                    procesaDestino.setIdcuenta(tb_spei_cuenta.getDato1());//Falta parametrizarla
                     procesaDestino.setMonto(transaction.getAmount());
                     procesaDestino.setIva(0.0);
                     procesaDestino.setTipo_amort(0);
@@ -1109,11 +1112,24 @@ public abstract class FacadeTransaction<T> {
                                                                                         + " AND idauxiliar=" + ctaDestino.getAuxiliaresPK().getIdauxiliar();
 
                                                                                 Query query_cartera = em.createNativeQuery(b_cartera);*/
-                                                                                String cartera =ctaDestino.getCartera(); //String.valueOf(query_cartera.getSingleResult());
-                                                                                if (cartera.toUpperCase().equals("M")) {
-                                                                                    message = "ESTATUS DE PRODUCTO:MOROSO";
-                                                                                } else {
-                                                                                    System.out.println("yesssss");
+                                                                               
+                                                                               String fechaTrabajo = "SELECT date(fechatrabajo) FROM origenes limit 1";
+                                                                               Query queryOrigenes = em.createNativeQuery(fechaTrabajo);
+                                                                               String fechaTrabajoReal = String.valueOf(queryOrigenes.getSingleResult());
+                                                                               String fecha[] = fechaTrabajoReal.split("-");
+                                                                               LocalDate date = LocalDate.of(Integer.parseInt(fecha[0]), Integer.parseInt(fecha[1]), Integer.parseInt(fecha[2]));
+                                                                               
+                                                                               String sai_aux_cartera = "SELECT sai_auxiliar(" + ctaDestino.getAuxiliaresPK().getIdorigenp() + "," + ctaDestino.getAuxiliaresPK().getIdproducto() + "," + ctaDestino.getAuxiliaresPK().getIdauxiliar() + ",'" + date + "')";
+                                                                               Query RsSai = em.createNativeQuery(sai_aux_cartera);
+                                                                               String sai_aux = RsSai.getSingleResult().toString();
+                                                                               String[] parts = sai_aux.split("\\|");                                                                               
+                                                                               List list_sai = Arrays.asList(parts);
+                                                                               
+                                                                               
+                                                                                String cartera =list_sai.get(13).toString(); //String.valueOf(query_cartera.getSingleResult());
+                                                                                if (cartera.toUpperCase().equals("M") || cartera.toUpperCase().contains("V")) {
+                                                                                    message = "ESTATUS DE PRODUCTO:"+cartera;
+                                                                                } else {                                                                                    
                                                                                     message = message + " VALIDADO CON EXITO";
                                                                                 }
                                                                             } else {

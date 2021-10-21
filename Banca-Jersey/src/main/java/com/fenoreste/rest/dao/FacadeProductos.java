@@ -402,16 +402,14 @@ public abstract class FacadeProductos<T> {
         }
         SimpleDateFormat dateFormatLocal = new SimpleDateFormat("HH:mm:ss.SSS");
         String hora = dateFormatLocal.format(new Date());
-        
-        String nombre_txt ="";
-        if(tipoproducto==1){
-            nombre_txt= "e_cuenta_corriente" + "-" + FInicio.substring(0, 10).replace("-", "") + "" + FFinal.substring(0, 10).replace("-", "") + hora.replace(":", "") + String.valueOf(numeroAleatorio) + ".txt";
-        }else{
-            nombre_txt= NProducto + "-" + FInicio.substring(0, 10).replace("-", "") + "" + FFinal.substring(0, 10).replace("-", "") + hora.replace(":", "") + String.valueOf(numeroAleatorio) + ".txt";
+
+        String nombre_txt = "";
+        if (tipoproducto == 1) {
+            nombre_txt = "e_cuenta_corriente" + "-" + FInicio.substring(0, 10).replace("-", "") + "" + FFinal.substring(0, 10).replace("-", "") + hora.replace(":", "") + String.valueOf(numeroAleatorio) + ".txt";
+        } else {
+            nombre_txt = NProducto + "-" + FInicio.substring(0, 10).replace("-", "") + "" + FFinal.substring(0, 10).replace("-", "") + hora.replace(":", "") + String.valueOf(numeroAleatorio) + ".txt";
         }
-        
-        
-        
+
         System.out.println("nombreTxt:" + nombre_txt);
         EntityManager em = AbstractFacade.conexion();
         File file = null;
@@ -456,10 +454,10 @@ public abstract class FacadeProductos<T> {
             FileReader fr = new FileReader(file);
             BufferedReader br = new BufferedReader(fr);
             String linea;
+            String linea_contenedor = "";
             while ((linea = br.readLine()) != null) {
                 //System.out.println("linea-------: " + linea);
-                if (linea.contains("usr/local/saicoop")) {
-                }
+
                 if (linea.contains("/usr/local/saicoop/img_estado_cuenta_ahorros/")) {
                     String cade = ruta();
                     //System.out.println("Cade:" + cade.replace("\\", "/"));
@@ -469,6 +467,24 @@ public abstract class FacadeProductos<T> {
                     //System.out.println("si tele");
                     linea = linea.replace(" & ", " y ");
                 }
+                if (linea.contains(".contenedor")) {
+                    linea_contenedor = linea_contenedor + linea;
+                }
+                if (linea.contains("width:") && linea_contenedor.contains(".contenedor")) {
+                    String[] lineas = linea.split(":");
+                    String linea_despues_de_2puntos = lineas[1].replace(" ", "");
+                    linea_despues_de_2puntos = ":auto;";
+                    String linea_reconstruida = lineas[0] + linea_despues_de_2puntos;
+                    linea = linea_reconstruida;
+                }
+                if (linea.replace(" ", "").contains("height:") && linea_contenedor.contains(".contenedor")) {
+                    String[] lineas = linea.split(":");
+                    String linea_despues_de_2puntos = lineas[1].replace(" ", "");
+                    linea_despues_de_2puntos = ":auto;";
+                    String linea_reconstruida = lineas[0] + linea_despues_de_2puntos;
+                    linea = linea_reconstruida;
+                }
+
                 out.write(linea);
 
             }

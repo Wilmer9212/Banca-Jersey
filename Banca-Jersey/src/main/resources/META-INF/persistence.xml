@@ -10,12 +10,12 @@
         <exclude-unlisted-classes>false</exclude-unlisted-classes> 
         
         <properties>
-            <!--
+            
             <property name="eclipselink.jdbc.read-connections.min" value="1000"/> 
             <property name="eclipselink.jdbc.write-connections.min" value="1"/> 
             <property name="eclipselink.logging.timestamp" value="false"/> 
             <property name="eclipselink.logging.session" value="false"/> 
-            <property name="eclipselink.logging.timestamp" value="100"/>-->
+            <property name="eclipselink.logging.timestamp" value="100"/>
            <property name="eclipselink.cache.shared.default" value="false" />
           
 
