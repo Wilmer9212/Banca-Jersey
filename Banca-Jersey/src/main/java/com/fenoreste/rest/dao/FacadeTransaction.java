@@ -34,6 +34,7 @@ import com.itextpdf.text.Paragraph;
 import com.itextpdf.text.pdf.PdfWriter;
 import com.syc.ws.endpoint.siscoop.BalanceQueryResponseDto;
 import com.syc.ws.endpoint.siscoop.DoWithdrawalAccountResponse;
+import com.syc.ws.endpoint.siscoop.LoadBalanceResponse;
 import java.io.BufferedReader;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -146,7 +147,7 @@ public abstract class FacadeTransaction<T> {
             //Valido la transferencia y devuelvo el mensaje que se produce
             //Valido el origen si es CSN 
             if (util2.obtenerOrigen(em).contains("SANNICOLAS")) {
-              
+
                 //Valido el producto para retiro
                 //Busco el producto configurado para retiros
                 messageBackend = validarTransferenciaCSN(transactionOWN, identificadorTransferencia, SPEIOrden);
@@ -244,11 +245,26 @@ public abstract class FacadeTransaction<T> {
 
                 //Leo la tabla donde se almacenan datos temporales de los datos a procesar
                 Procesa_pago_movimientos procesaOrigen = new Procesa_pago_movimientos();
+
                 //Preoaro el registro del abono
                 Procesa_pago_movimientos procesaDestino = new Procesa_pago_movimientos();
 
+                OpaDTO opaD = null;
+                Auxiliares aDestino = null;
                 //Si es un spei lo identifico porque aqui va a una cuenta contable
                 if (identificadorTransferencia == 5) {//tipo de orden SPEI
+
+                    //Busco la cuenta spei en tablas solo capital
+                    Tablas tb_spei_cuenta = util2.busquedaTabla(em, "bankingly_banca_movil", "cuenta_spei");
+                    //Busco la cuenta spei en tablas solo para comisiones                    
+                    Tablas tb_spei_cuenta_comisiones = util2.busquedaTabla(em, "bankingly_banca_movil", "cuenta_spei_comisiones");
+                    //Tablas pra cuenta del iva de comisiones spei
+                    //Busco la cuenta spei en tablas solo para comisiones                    
+                    Tablas tb_spei_cuenta_comisiones_iva = util2.busquedaTabla(em, "bankingly_banca_movil", "cuenta_spei_comisiones_iva");
+
+                    Double comisiones = Double.parseDouble(tb_spei_cuenta_comisiones.getDato2());
+                    Double iva_comisiones = Double.parseDouble(tb_spei_cuenta_comisiones.getDato2()) * 0.16;
+
                     //Preparo en temporales los datos para el cargo
                     procesaOrigen.setAuxiliaresPK(aOrigen.getAuxiliaresPK());
                     procesaOrigen.setFecha(fecha_transferencia);
@@ -259,7 +275,9 @@ public abstract class FacadeTransaction<T> {
                     procesaOrigen.setIdgrupo(aOrigen.getIdgrupo());
                     procesaOrigen.setIdsocio(aOrigen.getIdsocio());
                     procesaOrigen.setCargoabono(0);
+
                     procesaOrigen.setMonto(transaction.getAmount());
+
                     procesaOrigen.setIva(Double.parseDouble(aOrigen.getIva().toString()));
                     procesaOrigen.setTipo_amort(Integer.parseInt(String.valueOf(aOrigen.getTipoamortizacion())));
                     procesaOrigen.setSai_aux("");
@@ -270,8 +288,10 @@ public abstract class FacadeTransaction<T> {
 
                     em.clear();
 
-                    //Guardamos el destino
-                    AuxiliaresPK aPKSPEI = new AuxiliaresPK(0, 1, 0);
+                    //El abono a cuenta cntable que recibe solo capital de la transferencia
+                    AuxiliaresPK aPKSPEI = null;
+                    aPKSPEI = new AuxiliaresPK(0, 1, 0);
+
                     procesaDestino.setAuxiliaresPK(aPKSPEI);
                     procesaDestino.setFecha(fecha_transferencia);
                     procesaDestino.setIdusuario(Integer.parseInt(tbUsuario_.getDato1()));
@@ -281,10 +301,52 @@ public abstract class FacadeTransaction<T> {
                     procesaDestino.setIdgrupo(aOrigen.getIdgrupo());
                     procesaDestino.setIdsocio(aOrigen.getIdsocio());
                     procesaDestino.setCargoabono(1);
-                    //Busco la cuenta spei en tablas
-                    Tablas tb_spei_cuenta=util2.busquedaTabla(em,"bankingly_banca_movil","cuenta_spei");
-                    procesaDestino.setIdcuenta(tb_spei_cuenta.getDato1());//Falta parametrizarla
-                    procesaDestino.setMonto(transaction.getAmount());
+
+                    procesaDestino.setIdcuenta(tb_spei_cuenta.getDato1());//el idcuenta para capital
+                    procesaDestino.setMonto(transaction.getAmount() - Double.parseDouble(tb_spei_cuenta_comisiones.getDato2()) - (Double.parseDouble(tb_spei_cuenta_comisiones.getDato2()) * 0.16));//El total de la transferencia
+                    procesaDestino.setIva(0.0);
+                    procesaDestino.setTipo_amort(0);
+                    procesaDestino.setSai_aux("");
+                    em.getTransaction().begin();
+                    em.persist(procesaDestino);
+                    em.getTransaction().commit();
+
+                    em.clear();
+
+                    //guardo el abono a la cuenta contable comisiones
+                    aPKSPEI = new AuxiliaresPK(1, 1, 1);
+                    procesaDestino.setAuxiliaresPK(aPKSPEI);
+                    procesaDestino.setFecha(fecha_transferencia);
+                    procesaDestino.setIdusuario(Integer.parseInt(tbUsuario_.getDato1()));
+                    procesaDestino.setSesion(sesionc);
+                    procesaDestino.setReferencia(referencia);
+                    procesaDestino.setIdorigen(aOrigen.getIdorigen());
+                    procesaDestino.setIdgrupo(aOrigen.getIdgrupo());
+                    procesaDestino.setIdsocio(aOrigen.getIdsocio());
+                    procesaDestino.setCargoabono(1);
+                    procesaDestino.setIdcuenta(tb_spei_cuenta_comisiones.getDato1());
+                    procesaDestino.setMonto(comisiones);
+                    procesaDestino.setIva(0.0);
+                    procesaDestino.setTipo_amort(0);
+                    procesaDestino.setSai_aux("");
+                    em.getTransaction().begin();
+                    em.persist(procesaDestino);
+                    em.getTransaction().commit();
+
+                    em.clear();
+                    //Guardo el abono a la cuenta contable para comisiones de SPi
+                    aPKSPEI = new AuxiliaresPK(2, 1, 2);
+                    procesaDestino.setAuxiliaresPK(aPKSPEI);
+                    procesaDestino.setFecha(fecha_transferencia);
+                    procesaDestino.setIdusuario(Integer.parseInt(tbUsuario_.getDato1()));
+                    procesaDestino.setSesion(sesionc);
+                    procesaDestino.setReferencia(referencia);
+                    procesaDestino.setIdorigen(aOrigen.getIdorigen());
+                    procesaDestino.setIdgrupo(aOrigen.getIdgrupo());
+                    procesaDestino.setIdsocio(aOrigen.getIdsocio());
+                    procesaDestino.setCargoabono(1);
+                    procesaDestino.setIdcuenta(tb_spei_cuenta_comisiones_iva.getDato1());
+                    procesaDestino.setMonto(iva_comisiones);
                     procesaDestino.setIva(0.0);
                     procesaDestino.setTipo_amort(0);
                     procesaDestino.setSai_aux("");
@@ -294,11 +356,11 @@ public abstract class FacadeTransaction<T> {
 
                 } else {
                     //Obtengo el opa destino
-                    OpaDTO opaD = util.opa(transaction.getCreditproductbankidentifier());
+                    opaD = util.opa(transaction.getCreditproductbankidentifier());
                     //Destino
                     String destinoP = "SELECT * FROM auxiliares WHERE idorigenp=" + opaD.getIdorigenp() + " AND idproducto=" + opaD.getIdproducto() + " AND idauxiliar=" + opaD.getIdauxiliar();
                     Query queryDestino = em.createNativeQuery(destinoP, Auxiliares.class);
-                    Auxiliares aDestino = (Auxiliares) queryDestino.getSingleResult();
+                    aDestino = (Auxiliares) queryDestino.getSingleResult();
 
                     //Obtengo el producto Destino
                     prDestino = em.find(Productos.class, aDestino.getAuxiliaresPK().getIdproducto());
@@ -355,62 +417,256 @@ public abstract class FacadeTransaction<T> {
                 //Ejecutamos la funcion para distribuir el capital
                 //Solo para CSN
                 if (banderaCSN) {
-                    DoWithdrawalAccountResponse.Return doWithdrawalAccountResponse = new DoWithdrawalAccountResponse.Return();
-                    WsSiscoopFoliosTarjetas1 tarjetas = null;
+                    //DoWithdrawalAccountResponse.Return doWithdrawalAccountResponse = new DoWithdrawalAccountResponse.Return();
+                    boolean bandera_retiro = false;
+                    boolean bandera_deposito_origen = false;
+                    boolean bandera_deposito_tercero = false;
+                    WsSiscoopFoliosTarjetas1 tarjeta_origen = null;
+                    WsSiscoopFoliosTarjetas1 tarjeta_destino = null;
                     if (identificadorTransferencia != 5) {//Entran todos los tipos de transferencia excepto SPEI
                         //Si es desde la TDD(Aqui ya se leyo el ws de Alestra y esta levantado por eso trae la etiqueta de TDD)
-                        if (backendResponse.getBackendMessage().contains("TDD")) {                            //Retiramos de la TDD
-                            tarjetas = new TarjetaDeDebito().buscaTarjetaTDD(opaOrigen.getIdorigenp(), opaOrigen.getIdproducto(), opaOrigen.getIdauxiliar(), em);
-                            doWithdrawalAccountResponse = new TarjetaDeDebito().retiroTDD(tarjetas, procesaOrigen.getMonto());
-                            if (doWithdrawalAccountResponse.getCode() > 0) {
+                        if (backendResponse.getBackendMessage().contains("TDD")) {
+                            System.out.println("es desde TDD");
+
+                            System.out.println("Se esta buscando la tdd");
+                            tarjeta_origen = new TarjetaDeDebito().buscaTarjetaTDD(opaOrigen.getIdorigenp(), opaOrigen.getIdproducto(), opaOrigen.getIdauxiliar(), em);
+                            //Realizo un retiro de la TDD
+                            bandera_retiro = new TarjetaDeDebito().retiroTDD(tarjeta_origen, procesaOrigen.getMonto());
+                            //bandera_retiro = true;
+                            if (bandera_retiro) {//si se retiro de la tdd origen                                
+
+                                if (identificadorTransferencia == 2) {
+                                    //Si el destino tambien tdd
+                                    if (backendResponse.getBackendMessage().contains("TERCERO")) {
+                                        //Busco el folio Destino                                       
+                                        tarjeta_destino = new TarjetaDeDebito().buscaTarjetaTDD(opaD.getIdorigenp(), opaD.getIdproducto(), opaD.getIdauxiliar(), em);
+                                        if (tarjeta_destino.getActiva()) {
+                                            //Proceso un deposito al tercero TDD
+                                            bandera_deposito_tercero = new TarjetaDeDebito().depositoTDD(tarjeta_destino, procesaOrigen.getMonto());
+
+                                            if (bandera_deposito_tercero) {
+                                                //Datos a procesar
+                                                try {
+                                                    consulta_datos_procesar = "SELECT sai_bankingly_aplica_transaccion('" + fechaTr_.substring(0, 10) + "'," + procesaOrigen.getIdusuario() + ",'" + procesaOrigen.getSesion() + "','" + procesaOrigen.getReferencia() + "')";
+                                                    procesa_movimiento = em.createNativeQuery(consulta_datos_procesar);
+                                                    total_procesados = Integer.parseInt(String.valueOf(procesa_movimiento.getSingleResult()));
+                                                } catch (Exception e) {
+                                                    total_procesados = 0;
+                                                    System.out.println("La funcion saicoop no pudo distribuir el capital");
+                                                }
+                                                if (total_procesados > 0) {
+                                                    finish = true;
+                                                } else {
+                                                    //Si no se aplico el movimiento pero como ya se habia retirado de la TDD oirgen entonce se lo devolvemos
+                                                    //Tambien ya se deposito a TDD destino tercero entonces se le retira
+                                                    bandera_deposito_origen = new TarjetaDeDebito().depositoTDD(tarjeta_origen, procesaOrigen.getMonto());
+                                                    bandera_retiro = new TarjetaDeDebito().retiroTDD(tarjeta_destino, procesaOrigen.getMonto());
+                                                    backendResponse.setBackendMessage("NO SE PUDIERON PROCESAR LOS MOVIMIENTOS EN SAICOOP");
+                                                }
+                                            } else {
+                                                bandera_deposito_origen = new TarjetaDeDebito().depositoTDD(tarjeta_origen, procesaOrigen.getMonto());
+                                                backendResponse.setBackendMessage("NO SE PUDO DEPOSITAR A LA TARJETA DE DEBITO DESTINO");
+                                            }
+                                        } else {
+                                            //No se pudo depositar a Tercero
+                                            backendResponse.setBackendMessage("VERIFIQUE EL ESTATUS DE TARJETA DESTINO");
+                                            //Se le regresal el saldo a la tdd origen
+                                            bandera_deposito_origen = new TarjetaDeDebito().depositoTDD(tarjeta_origen, procesaOrigen.getMonto());
+
+                                        }
+                                    } else {//Si el tercero no es TDD
+                                        //Datos a procesar
+                                        try {
+                                            consulta_datos_procesar = "SELECT sai_bankingly_aplica_transaccion('" + fechaTr_.substring(0, 10) + "'," + procesaOrigen.getIdusuario() + ",'" + procesaOrigen.getSesion() + "','" + procesaOrigen.getReferencia() + "')";
+                                            procesa_movimiento = em.createNativeQuery(consulta_datos_procesar);
+                                            total_procesados = Integer.parseInt(String.valueOf(procesa_movimiento.getSingleResult()));
+                                        } catch (Exception e) {
+                                            total_procesados = 0;
+                                            System.out.println("La funcion saicoop no pudo distribuir el capital");
+                                        }
+                                        //Si la operacion se aplico de manera correcta lo dejamos asi es decir total de procesados mayor a 0
+                                        if (total_procesados > 0) {
+                                            finish = true;
+                                        } else {
+                                            //Si no se aplico el movimiento pero como ya se habia retirado de la TDD entonce se lo devolvemos
+                                            bandera_deposito_origen = new TarjetaDeDebito().depositoTDD(tarjeta_origen, procesaOrigen.getMonto());
+                                            backendResponse.setBackendMessage("NO SE PUDIERON PROCESAR LOS MOVIMIENTOS EN SAICOOP");
+                                        }
+
+                                    }
+
+                                } else {//Si no es Tercero(TodossssssssssssssssssssssssssssssssssssssssSS)ffffffffffffffffffffffffffffffffff tddd
+
+                                    //Verifico que el producto destino sea un prestamo 
+                                    if (prDestino.getTipoproducto() == 2) {
+                                        //Busco el tipo el tipo de amortizacion
+
+                                        if (aDestino.getTipoamortizacion() == 5) {
+                                            //Entra si es hipotecario
+                                            String si_se_puede_aplicar = "select sai_bankinlgy_limite_adelanto (" + aDestino.getAuxiliaresPK().getIdorigenp() + ","
+                                                    + "" + aDestino.getAuxiliaresPK().getIdproducto() + ","
+                                                    + "" + aDestino.getAuxiliaresPK().getIdauxiliar() + ","
+                                                    + "(SELECT date(fechatrabajo) FROM origenes limit 1),"
+                                                    + transaction.getAmount() + ",NULL)";
+                                            Query query_se_puede_aplicar = em.createNativeQuery(si_se_puede_aplicar);
+                                            Double se_puede_pagar = Double.parseDouble(String.valueOf(query_se_puede_aplicar.getSingleResult()));
+                                            if (se_puede_pagar > 0) {
+                                                //Datos a procesar
+                                                try {
+                                                    consulta_datos_procesar = "SELECT sai_bankingly_aplica_transaccion('" + fechaTr_.substring(0, 10) + "'," + procesaOrigen.getIdusuario() + ",'" + procesaOrigen.getSesion() + "','" + procesaOrigen.getReferencia() + "')";
+                                                    procesa_movimiento = em.createNativeQuery(consulta_datos_procesar);
+                                                    total_procesados = Integer.parseInt(String.valueOf(procesa_movimiento.getSingleResult()));
+                                                } catch (Exception e) {
+                                                    total_procesados = 0;
+                                                    System.out.println("La funcion saicoop no pudo distribuir el capital");
+                                                }
+
+                                                if (total_procesados > 0) {
+                                                    finish = true;
+                                                } else {
+                                                    //Si no se aplico el movimiento pero como ya se habia retirado de la TDD entonce se lo devolvemos
+                                                    bandera_deposito_origen = new TarjetaDeDebito().depositoTDD(tarjeta_origen, procesaOrigen.getMonto());
+                                                    backendResponse.setBackendMessage("NO SE PUDO PROCESAR FUNCION EN SAICOOP");
+                                                }
+
+                                            } else {
+                                                //Si no se aplico el movimiento pero como ya se habia retirado de la TDD entonce se lo devolvemos
+                                                bandera_deposito_origen = new TarjetaDeDebito().depositoTDD(tarjeta_origen, procesaOrigen.getMonto());
+                                                backendResponse.setBackendMessage("MONTO ES MENOR A LO QUE SE PERMITE ADELANTAR,ESQUEMA HIPOTECARIO");
+                                            }
+                                        } else {//Si es prestamo creciente
+                                            //Datos a procesar
+                                            consulta_datos_procesar = "SELECT sai_bankingly_aplica_transaccion('" + fechaTr_.substring(0, 10) + "'," + procesaOrigen.getIdusuario() + ",'" + procesaOrigen.getSesion() + "','" + procesaOrigen.getReferencia() + "')";
+                                            //Proceso
+                                            procesa_movimiento = em.createNativeQuery(consulta_datos_procesar);
+                                            //Obtengo el total de procesados
+                                            total_procesados = Integer.parseInt(String.valueOf(procesa_movimiento.getSingleResult()));
+                                            //Si la operacion se aplico de manera correcta lo dejamos asi es decir total de procesados mayor a 0
+                                            if (total_procesados > 0) {
+                                                finish = true;
+                                            } else {
+                                                //Si no se aplico el movimiento pero como ya se habia retirado de la TDD entonce se lo devolvemos
+                                                bandera_deposito_origen = new TarjetaDeDebito().depositoTDD(tarjeta_origen, procesaOrigen.getMonto());
+                                                backendResponse.setBackendMessage("NO SE PUDO PROCESAR FUNCION EN SAICOOP");
+                                            }
+                                        }
+
+                                    } else {
+                                        //Datos a procesar
+                                        consulta_datos_procesar = "SELECT sai_bankingly_aplica_transaccion('" + fechaTr_.substring(0, 10) + "'," + procesaOrigen.getIdusuario() + ",'" + procesaOrigen.getSesion() + "','" + procesaOrigen.getReferencia() + "')";
+                                        //Proceso
+                                        procesa_movimiento = em.createNativeQuery(consulta_datos_procesar);
+                                        //Obtengo el total de procesados
+                                        total_procesados = Integer.parseInt(String.valueOf(procesa_movimiento.getSingleResult()));
+
+                                        //Si la operacion se aplico de manera correcta lo dejamos asi es decir total de procesados mayor a 0
+                                        if (total_procesados > 0) {
+                                            finish = true;
+                                        } else {
+                                            //Si no se aplico el movimiento pero como ya se habia retirado de la TDD entonce se lo devolvemos
+                                            bandera_deposito_origen = new TarjetaDeDebito().depositoTDD(tarjeta_origen, procesaOrigen.getMonto());
+                                            backendResponse.setBackendMessage("NO SE PUDO PROCESAR FUNCION EN SAICOOP");
+                                        }
+                                    }
+                                }
+
+                            } else {
+                                backendResponse.setBackendMessage("NO SE PUDO PROCESAR EL RETIRO DE TARJETA DE DEBITO ORIGEN");
+                            }
+
+                        } else {//Solo para pruebas
+                            if (identificadorTransferencia == 2) {//Si el destino es una TDD
+
+                                if (backendResponse.getBackendMessage().contains("TERCERO")) {
+                                    System.out.println("ES tercero");
+                                    //Busco el folio Destino
+                                    tarjeta_destino = new WsSiscoopFoliosTarjetas1(opaD.getIdorigenp(), opaD.getIdproducto(), opaD.getIdauxiliar());
+                                    if (tarjeta_destino.getActiva()) {
+                                        System.out.println("La tarjeta esta activa");
+                                        //Proceso un deposito al tercero TDD
+                                        bandera_deposito_tercero = new TarjetaDeDebito().depositoTDD(tarjeta_destino, procesaOrigen.getMonto());
+                                        if (bandera_deposito_tercero) {
+                                            try {
+                                                consulta_datos_procesar = "SELECT sai_bankingly_aplica_transaccion('" + fechaTr_.substring(0, 10) + "'," + procesaOrigen.getIdusuario() + ",'" + procesaOrigen.getSesion() + "','" + procesaOrigen.getReferencia() + "')";
+                                                procesa_movimiento = em.createNativeQuery(consulta_datos_procesar);
+                                                total_procesados = Integer.parseInt(String.valueOf(procesa_movimiento.getSingleResult()));
+                                            } catch (Exception e) {
+                                                total_procesados = 0;
+                                                System.out.println("La funcion saicoop no pudo distribuir el capital");
+                                            }
+
+                                            if (total_procesados > 0) {
+                                                finish = true;
+                                            } else {
+                                                backendResponse.setBackendMessage("NO SE PUDIERON PROCESAR LOS MOVIMENTOS EN SAICOOP");
+                                                bandera_retiro = new TarjetaDeDebito().retiroTDD(tarjeta_destino, procesaOrigen.getMonto());
+                                            }
+
+                                        } else {
+                                            backendResponse.setBackendMessage("LA TARJETA DE DEBITO DESTINO ESTA INACTIVA");
+                                        }
+                                    }
+
+                                } else {
+                                    consulta_datos_procesar = "SELECT sai_bankingly_aplica_transaccion('" + fechaTr_.substring(0, 10) + "'," + procesaOrigen.getIdusuario() + ",'" + procesaOrigen.getSesion() + "','" + procesaOrigen.getReferencia() + "')";
+                                    Query procesa_pago = em.createNativeQuery(consulta_datos_procesar);
+                                    total_procesados = Integer.parseInt(String.valueOf(procesa_pago.getSingleResult()));
+                                    if (total_procesados > 0) {
+                                        finish = true;
+                                    }
+                                }
+
+                            } else {
                                 consulta_datos_procesar = "SELECT sai_bankingly_aplica_transaccion('" + fechaTr_.substring(0, 10) + "'," + procesaOrigen.getIdusuario() + ",'" + procesaOrigen.getSesion() + "','" + procesaOrigen.getReferencia() + "')";
-                                procesa_movimiento = em.createNativeQuery(consulta_datos_procesar);
-                                total_procesados = Integer.parseInt(String.valueOf(procesa_movimiento.getSingleResult()));
-                                //Si la operacion se aplico de manera corracta lo dejamos asi
+
+                                System.out.println("consulta app:" + consulta_datos_procesar);
+                                Query procesa_pago = em.createNativeQuery(consulta_datos_procesar);
+                                total_procesados = Integer.parseInt(String.valueOf(procesa_pago.getSingleResult()));
                                 if (total_procesados > 0) {
                                     finish = true;
-                                } else {//Si no se aplico el movimiento pero como ya se habia retirado de la TDD entonce se lo devolvemos
-                                    System.out.println("Aqui programa el deposito a la tdd nuevamente");
+                                } else {
+                                    backendResponse.setBackendMessage("NO SE TERMINO LA TRANSACCION VERIFIQUE FUNCION");
                                 }
-                            } else {
-                                backendResponse.setBackendMessage("LOS WS PARA RETIRO DE LA TARJETA DE DEBITO NO ESTAN ACTIVOS");
-                            }
-                        } else {//Solo para pruebas
-                            consulta_datos_procesar = "SELECT sai_bankingly_aplica_transaccion('" + fechaTr_.substring(0, 10) + "'," + procesaOrigen.getIdusuario() + ",'" + procesaOrigen.getSesion() + "','" + procesaOrigen.getReferencia() + "')";
-                            Query procesa_pago = em.createNativeQuery(consulta_datos_procesar);
-                            total_procesados = Integer.parseInt(String.valueOf(procesa_pago.getSingleResult()));
-                            if (total_procesados > 0) {
-                                finish = true;
-                            } else {
-                                backendResponse.setBackendMessage("ERROR AL PROCESAR LOS MOVIMIENTOS");
                             }
                         }
                     } else {
                         //entra SPEI
-                        tarjetas = new TarjetaDeDebito().buscaTarjetaTDD(opaOrigen.getIdorigenp(), opaOrigen.getIdproducto(), opaOrigen.getIdauxiliar(), em);
-                        //Retiramos de la TDD
-                        doWithdrawalAccountResponse = new TarjetaDeDebito().retiroTDD(tarjetas, procesaOrigen.getMonto());
+                        tarjeta_origen = new TarjetaDeDebito().buscaTarjetaTDD(opaOrigen.getIdorigenp(), opaOrigen.getIdproducto(), opaOrigen.getIdauxiliar(), em);
+                        //Retiramos de la TDD origen
+
+                        bandera_retiro = new TarjetaDeDebito().retiroTDD(tarjeta_origen, procesaOrigen.getMonto());
+                        //bandera_retiro=true;
                         //si el retiro se efectuo
-                        if (doWithdrawalAccountResponse.getCode() > 0) {
+                        if (bandera_retiro) {
                             //Enviamos la orden SPEI 
                             response = metodoEnviarSPEI(SPEIOrden);
+
                             //Si la orden se envio correctamente
                             if (response.getId() > 0) {
                                 //Ahora si aplicamos la operacion
-                                consulta_datos_procesar = "SELECT sai_bankingly_aplica_transaccion('" + fechaTr_.substring(0, 10) + "'," + procesaOrigen.getIdusuario() + ",'" + procesaOrigen.getSesion() + "','" + procesaOrigen.getReferencia() + "')";
+                                try {
+                                    consulta_datos_procesar = "SELECT sai_bankingly_aplica_transaccion('" + fechaTr_.substring(0, 10) + "'," + procesaOrigen.getIdusuario() + ",'" + procesaOrigen.getSesion() + "','" + procesaOrigen.getReferencia() + "')";
+                                    procesa_movimiento = em.createNativeQuery(consulta_datos_procesar);
+                                    total_procesados = Integer.parseInt(String.valueOf(procesa_movimiento.getSingleResult()));
+                                } catch (Exception e) {
+                                    total_procesados = 0;
+                                    System.out.println("La funcion saicoop no pudo distribuir el capital");
+                                }
 
-                                procesa_movimiento = em.createNativeQuery(consulta_datos_procesar);
-                                total_procesados = Integer.parseInt(String.valueOf(procesa_movimiento.getSingleResult()));
                                 //Si la operacion se aplico de manera corracta lo dejamos asi
                                 if (total_procesados > 0) {
                                     mensajeBackendResult = "TRANSACCION EXITOSA";
                                     clean = true;
                                 } else {//Si no se aplico el movimiento pero como ya se habia retirado de la TDD entonce se lo devolvemos
-                                    backendResponse.setBackendMessage("NO SE APLICO EL MOVIMIENTO DEVOLVER SLDO A LA TDD");
-                                    System.out.println("Aqui programa el deposito a la tdd nuevamente");
+                                    backendResponse.setBackendMessage("NO SE APLICO EL MOVIMIENTO FALLA AL PROCESAR MOVIMIENTOS EN SAICOOP");
+                                    //Se devuelve a la TDD el saldo que se le retiro
+                                    bandera_deposito_origen = new TarjetaDeDebito().depositoTDD(tarjeta_origen, procesaOrigen.getMonto());
                                 }
+
                             } else {
-                                backendResponse.setBackendMessage(response.getError() + "SE REGRESO EL SALDO DE LA TDD");
+                                bandera_deposito_origen = new TarjetaDeDebito().depositoTDD(tarjeta_origen, procesaOrigen.getMonto());
+                                backendResponse.setBackendMessage(response.getError());
+                                System.out.println("SE REGREESO EL SALDO DE LA TDD");
                             }
 
                         } else {
@@ -418,15 +674,22 @@ public abstract class FacadeTransaction<T> {
                         }
 
                     }
+
                 } else {
                     //El resto de las cajas
-                    consulta_datos_procesar = "SELECT sai_bankingly_aplica_transaccion('" + fechaTr_.substring(0, 10) + "'," + procesaOrigen.getIdusuario() + ",'" + procesaOrigen.getSesion() + "','" + procesaOrigen.getReferencia() + "')";
-                    procesa_movimiento = em.createNativeQuery(consulta_datos_procesar);
-                    total_procesados = Integer.parseInt(String.valueOf(procesa_movimiento.getSingleResult()));
+                    try {
+                        consulta_datos_procesar = "SELECT sai_bankingly_aplica_transaccion('" + fechaTr_.substring(0, 10) + "'," + procesaOrigen.getIdusuario() + ",'" + procesaOrigen.getSesion() + "','" + procesaOrigen.getReferencia() + "')";
+                        procesa_movimiento = em.createNativeQuery(consulta_datos_procesar);
+                        total_procesados = Integer.parseInt(String.valueOf(procesa_movimiento.getSingleResult()));
+                    } catch (Exception e) {
+                        total_procesados = 0;
+                        System.out.println("La funcion saicoop no pudo distribuir el capital");
+                    }
+
                     if (total_procesados > 0) {
                         finish = true;
                     } else {
-                        backendResponse.setBackendMessage("ERROR AL PROCESAR LOS MOVIMIENTOS");
+                        backendResponse.setBackendMessage("NO SE APLICO EL MOVIMIENTO FALLA AL PROCESAR MOVIMIENTOS EN SAICOOP");
                     }
                 }
 
@@ -452,8 +715,8 @@ public abstract class FacadeTransaction<T> {
                                         + "IVA INTERES MORATORIO :" + ArrayDistribucion[3] + "\n"
                                         + "INTERES ORDINARIO     :" + ArrayDistribucion[4] + "\n"
                                         + "IVA INTERES ORDINARIO :" + ArrayDistribucion[5] + "\n"
-                                        + "CAPITAL               :" + ArrayDistribucion[5] + "\n"
-                                        + "ADELANTO DE INTERES   :" + ArrayDistribucion[6] + "\n \n \n \n"
+                                        + "CAPITAL               :" + ArrayDistribucion[6] + "\n"
+                                        + "ADELANTO DE INTERES   :" + ArrayDistribucion[7] + "\n \n \n \n"
                                         + "EVITA ATRASOS, EN TU PRESTAMO EL PAGO DE INTERESES DEBE SER MENSUAL";//Para adelanto de interese solo aplicaria para los productos configurados
                             } else {
                                 mensajeBackendResult = "PAGO EXITOSO" + "\n"
@@ -463,8 +726,8 @@ public abstract class FacadeTransaction<T> {
                                         + "IVA INTERES MORATORIO :" + ArrayDistribucion[3] + "\n"
                                         + "INTERES ORDINARIO     :" + ArrayDistribucion[4] + "\n"
                                         + "IVA INTERES ORDINARIO :" + ArrayDistribucion[5] + "\n"
-                                        + "CAPITAL               :" + ArrayDistribucion[5] + "\n"
-                                        + "ADELANTO DE INTERES   :" + ArrayDistribucion[6] + "\n \n \n \n \n \n";//Para adelanto de interese solo aplicaria para los productos configurados
+                                        + "CAPITAL               :" + ArrayDistribucion[6] + "\n"
+                                        + "ADELANTO DE INTERES   :" + ArrayDistribucion[7] + "\n \n \n \n \n \n";//Para adelanto de interese solo aplicaria para los productos configurados
                             }
                             clean = true;
                         } else if (prDestino.getTipoproducto() == 0) {
@@ -477,18 +740,24 @@ public abstract class FacadeTransaction<T> {
                 if (clean) {
                     //Aplico la  funcion para limpiar la tabla donde estaban los pagos cargo y abono
                     String consulta_termina_transaccion = "SELECT sai_bankingly_termina_transaccion('" + fechaTr_.substring(0, 10) + "'," + procesaOrigen.getIdusuario() + ",'" + procesaOrigen.getSesion() + "','" + procesaOrigen.getReferencia() + "')";
-                    Query termina_transaccion = em.createNativeQuery(consulta_termina_transaccion);
+                     Query termina_transaccion = em.createNativeQuery(consulta_termina_transaccion);
+
                     int registros_limpiados = Integer.parseInt(String.valueOf(termina_transaccion.getSingleResult()));
                     System.out.println("Registros Limpiados con exito:" + registros_limpiados);
+                    
                     String envio_ok_sms = "";
 
                     if (util2.obtenerOrigen(em).toUpperCase().replace(" ", "").contains("SANNICOLAS")) {
                         PreparaSMS envio_sms = new PreparaSMS();
                         //Verfico si esta activo el permitir enviar sms
+                        System.out.println("Buscando tablas sms:");
                         Tablas tb_sms_activo = util2.busquedaTabla(em, "bankingly_banca_movil", "smsactivo");
+                        System.out.println("Tablas sms:" + tb_sms_activo.getTablasPK());
+
                         if (Integer.parseInt(tb_sms_activo.getDato1()) == 1) {
                             //Obtengo el minimo para enviar el SMS
                             Tablas tb_minimo_sms = util2.busquedaTabla(em, "bankingly_banca_movil", "monto_minimo_sms");
+
                             if (transaction.getAmount() >= Double.parseDouble(tb_minimo_sms.getDato1())) {
                                 if (identificadorTransferencia == 1) {
                                     System.out.println("entro a enviar sms a cuenta propia");
@@ -519,7 +788,7 @@ public abstract class FacadeTransaction<T> {
                             }
                         }
                     }
-                    
+
                     if (envio_ok_sms.toUpperCase().contains("ERROR")) {
                         backendResponse.setBackendMessage(backendResponse.getBackendMessage() + " " + envio_ok_sms);
                     }
@@ -543,7 +812,7 @@ public abstract class FacadeTransaction<T> {
                         em.persist(transaction);
                         em.getTransaction().commit();
                     } catch (Exception e) {
-                        System.out.println("Error al persistir:"+e.getMessage());
+                        System.out.println("Error al persistir:" + e.getMessage());
                     }
 
                 }
@@ -558,7 +827,7 @@ public abstract class FacadeTransaction<T> {
             }
             System.out.println("Error Al ejecutar transferencia:" + e.getMessage());
             return backendResponse;
-        }finally{
+        } finally {
             em.close();
         }
 
@@ -589,7 +858,7 @@ public abstract class FacadeTransaction<T> {
         } catch (Exception e) {
             System.out.println("Error al crear voucher:" + e.getMessage());
             return "";
-        }finally{
+        } finally {
             em.close();
         }
 
@@ -627,13 +896,13 @@ public abstract class FacadeTransaction<T> {
                 Double saldo = Double.parseDouble(ctaOrigen.getSaldo().toString());
                 if (util2.obtenerOrigen(em).contains("SANNICOLAS")) {
                     Tablas tablaProductoTDD = new TarjetaDeDebito().productoTddwebservice(em);
-                    if (ctaOrigen.getAuxiliaresPK().getIdproducto() == Integer.parseInt(tablaProductoTDD.getDato2())) {
+                    if (ctaOrigen.getAuxiliaresPK().getIdproducto() == Integer.parseInt(tablaProductoTDD.getDato1())) {
                         //Si es la TDD               
                         WsSiscoopFoliosTarjetasPK1 foliosPK = new WsSiscoopFoliosTarjetasPK1(ctaOrigen.getAuxiliaresPK().getIdorigenp(), ctaOrigen.getAuxiliaresPK().getIdproducto(), ctaOrigen.getAuxiliaresPK().getIdauxiliar());
                         WsSiscoopFoliosTarjetas1 tarjetas = new TarjetaDeDebito().buscaTarjetaTDD(foliosPK.getIdorigenp(), foliosPK.getIdproducto(), foliosPK.getIdauxiliar(), em);
                         try {
                             System.out.println("consultando saldo para idtarjeta:" + tarjetas.getIdtarjeta());
-                            BalanceQueryResponseDto saldoTDD = new TarjetaDeDebito().saldoTDD(tarjetas.getWsSiscoopFoliosTarjetasPK(), em);
+                            BalanceQueryResponseDto saldoTDD = new TarjetaDeDebito().saldoTDD(tarjetas.getWsSiscoopFoliosTarjetasPK());
                             saldo = saldoTDD.getAvailableAmount();
                             message = "TDD";
                             //saldo = 200.0;
@@ -682,55 +951,55 @@ public abstract class FacadeTransaction<T> {
                                                 //Valido que realmente el el producto destino pertenezca al mismo socio 
                                                 if (ctaOrigen.getIdorigen() == ctaDestino.getIdorigen() && ctaOrigen.getIdgrupo() == ctaDestino.getIdgrupo() && ctaOrigen.getIdsocio() == ctaDestino.getIdsocio()) {
                                                     //valido el minimo o maximo para banca movil
-                                                  /*  if (minMax(monto).toUpperCase().contains("VALIDO")) {
+                                                    /*  if (minMax(monto).toUpperCase().contains("VALIDO")) {
                                                         //Valido el monto maximo por dia
                                                         if (MaxPordia(opaOrigen, monto)) {
-                                                        */
-                                                            /*=======================REGLAS DE NEGOCIO==================================*/
-                                                            //Valido que la cuenta origen para CSN esat un grupo de retiro configurado
-                                                            if (util2.obtenerOrigen(em).contains("SANNICOL")) {
-                                                                //Buscamos que el producto origen pertenezca al grupo de retiro
-                                                                Tablas tb = util2.busquedaTabla(em, "bankingly_banca_movil", "grupo_retiro");
-                                                                if (ctaOrigen.getIdgrupo() == Integer.parseInt(tb.getDato1())) {
-                                                                    //Ahora verifico que el destino perteneneza al grupo de depositos
-                                                                    Tablas tbRetiro = util2.busquedaTabla(em, "bankingly_banca_movil", "grupo_deposito");
-                                                                    String cadena[] = tbRetiro.getDato1().split("\\|");
+                                                     */
+ /*=======================REGLAS DE NEGOCIO==================================*/
+                                                    //Valido que la cuenta origen para CSN esat un grupo de retiro configurado
+                                                    if (util2.obtenerOrigen(em).contains("SANNICOL")) {
+                                                        //Buscamos que el producto origen pertenezca al grupo de retiro
+                                                        Tablas tb = util2.busquedaTabla(em, "bankingly_banca_movil", "grupo_retiro");
+                                                        if (ctaOrigen.getIdgrupo() == Integer.parseInt(tb.getDato1())) {
+                                                            //Ahora verifico que el destino perteneneza al grupo de depositos
+                                                            Tablas tbRetiro = util2.busquedaTabla(em, "bankingly_banca_movil", "grupo_deposito");
+                                                            String cadena[] = tbRetiro.getDato1().split("\\|");
 
-                                                                    List list = Arrays.asList(cadena);
-                                                                    for (int i = 0; i < list.size(); i++) {
-                                                                        if (ctaOrigen.getIdgrupo() == Integer.parseInt(String.valueOf(list.get(i)))) {
-                                                                            banderaGrupo = true;
-                                                                        }
-                                                                    }
-                                                                    if (banderaGrupo) {
-                                                                        //valido que el producto acepte depositos
-                                                                        Tablas tbDeposito = util2.busquedaTabla(em, "bankingly_banca_movil", "productos_deposito");
-                                                                        System.out.println("tabla Productos deposito:" + tbDeposito.getDato2());
-                                                                        String productos_deposito[] = tbDeposito.getDato2().split("\\|");
-
-                                                                        List list_deposito = Arrays.asList(productos_deposito);
-                                                                        for (int i = 0; i < list_deposito.size(); i++) {
-                                                                            System.out.println("prod pos " + i + ":" + list_deposito.get(i));
-                                                                            if (ctaDestino.getAuxiliaresPK().getIdproducto() == Integer.parseInt(String.valueOf(list_deposito.get(i)))) {
-                                                                                banderaProductosDeposito = true;
-                                                                            }
-                                                                        }
-                                                                        if (banderaProductosDeposito) {
-                                                                            message = message + " VALIDADO CON EXITO";
-                                                                        } else {
-                                                                            message = "PRODUCTO NO CONFIGURADO PARA RECIBIR DEPOSITOS";
-                                                                        }
-                                                                    } else {
-                                                                        message = "GRUPO NO CONFIGURADO PARA DEPOSITOS";
-                                                                    }
-                                                                } else {
-                                                                    message = "SOCIO NO PERTENECE AL GRUPO DE RETIRO";
+                                                            List list = Arrays.asList(cadena);
+                                                            for (int i = 0; i < list.size(); i++) {
+                                                                if (ctaOrigen.getIdgrupo() == Integer.parseInt(String.valueOf(list.get(i)))) {
+                                                                    banderaGrupo = true;
                                                                 }
-
-                                                            } else {
-                                                                message = "VALIDADO CON EXITO";
                                                             }
-                                                       /* } else {
+                                                            if (banderaGrupo) {
+                                                                //valido que el producto acepte depositos
+                                                                Tablas tbDeposito = util2.busquedaTabla(em, "bankingly_banca_movil", "productos_deposito");
+                                                                System.out.println("tabla Productos deposito:" + tbDeposito.getDato2());
+                                                                String productos_deposito[] = tbDeposito.getDato2().split("\\|");
+
+                                                                List list_deposito = Arrays.asList(productos_deposito);
+                                                                for (int i = 0; i < list_deposito.size(); i++) {
+                                                                    System.out.println("prod pos " + i + ":" + list_deposito.get(i));
+                                                                    if (ctaDestino.getAuxiliaresPK().getIdproducto() == Integer.parseInt(String.valueOf(list_deposito.get(i)))) {
+                                                                        banderaProductosDeposito = true;
+                                                                    }
+                                                                }
+                                                                if (banderaProductosDeposito) {
+                                                                    message = message + " VALIDADO CON EXITO";
+                                                                } else {
+                                                                    message = "PRODUCTO NO CONFIGURADO PARA RECIBIR DEPOSITOS";
+                                                                }
+                                                            } else {
+                                                                message = "GRUPO NO CONFIGURADO PARA DEPOSITOS";
+                                                            }
+                                                        } else {
+                                                            message = "SOCIO NO PERTENECE AL GRUPO DE RETIRO";
+                                                        }
+
+                                                    } else {
+                                                        message = "VALIDADO CON EXITO";
+                                                    }
+                                                    /* } else {
                                                             message = "MONTO TRASPASA EL PERMITIDO DIARIO";
                                                         }
                                                     } else {
@@ -772,7 +1041,7 @@ public abstract class FacadeTransaction<T> {
             message = "ERROR AL PROCESAR CONSULTA VALIDACIONES DE DATOS";
             System.out.println("Error en validacion transferencia entre mis cuentas:" + e.getMessage());
             return message;
-        }finally{
+        } finally {
             em.close();
         }
         return message.toUpperCase();
@@ -792,6 +1061,7 @@ public abstract class FacadeTransaction<T> {
         String message = "";
         boolean banderaGrupo = false;
         boolean banderaProductosDeposito = false;
+        System.out.println("leggggg");
         try {
             Auxiliares ctaOrigen = null;
             boolean bOrigen = false;
@@ -804,19 +1074,18 @@ public abstract class FacadeTransaction<T> {
                 System.out.println("Error al buscar producto origen:" + e.getMessage());
                 bOrigen = false;
             }
-
+            Tablas tablaProductoTDD = null;
             if (bOrigen) {
                 Double saldo = Double.parseDouble(ctaOrigen.getSaldo().toString());
                 if (util2.obtenerOrigen(em).contains("SANNICOLAS")) {
-                    Tablas tablaProductoTDD = new TarjetaDeDebito().productoTddwebservice(em);
-                    if (ctaOrigen.getAuxiliaresPK().getIdproducto() == Integer.parseInt(tablaProductoTDD.getDato2())) {
-
+                    tablaProductoTDD = new TarjetaDeDebito().productoTddwebservice(em);
+                    if (ctaOrigen.getAuxiliaresPK().getIdproducto() == Integer.parseInt(tablaProductoTDD.getDato1())) {
                         WsSiscoopFoliosTarjetasPK1 foliosPK = new WsSiscoopFoliosTarjetasPK1(ctaOrigen.getAuxiliaresPK().getIdorigenp(), ctaOrigen.getAuxiliaresPK().getIdproducto(), ctaOrigen.getAuxiliaresPK().getIdauxiliar());
                         WsSiscoopFoliosTarjetas1 tarjetas = new TarjetaDeDebito().buscaTarjetaTDD(foliosPK.getIdorigenp(), foliosPK.getIdproducto(), foliosPK.getIdauxiliar(), em);
                         try {
                             System.out.println("consultando saldo para idtarjeta:" + tarjetas.getIdtarjeta());
-                            BalanceQueryResponseDto saldoTDD = new TarjetaDeDebito().saldoTDD(tarjetas.getWsSiscoopFoliosTarjetasPK(), em);
-                            message = "TDD";
+                            BalanceQueryResponseDto saldoTDD = new TarjetaDeDebito().saldoTDD(tarjetas.getWsSiscoopFoliosTarjetasPK());
+                            message = "DESDE TDD";
                             saldo = saldoTDD.getAvailableAmount();
                             //saldo = 200.0;
                         } catch (Exception e) {
@@ -857,57 +1126,171 @@ public abstract class FacadeTransaction<T> {
                                         //Busco si existe el producto destino en el catalogo de banca movil
                                         Productos_bankingly catalogoDestino = em.find(Productos_bankingly.class, productoDestino.getIdproducto());
                                         if (catalogoDestino != null) {
+
                                             //Verifico si de verdad cuenta destinono pertence al mismo socio ya que es transferencia a tercero
                                             if (ctaOrigen.getIdsocio() != ctaDestino.getIdsocio()) {
                                                 //Valido que el producto destino no sea un prestamo
                                                 if (productoDestino.getTipoproducto() == 0) {
                                                     //valido el minimo o maximo para banca movil
-                                                  /*  if (minMax(monto).toUpperCase().contains("VALIDO")) {
+                                                    /*  if (minMax(monto).toUpperCase().contains("VALIDO")) {
                                                         //Valido el monto maximo por dia
                                                         if (MaxPordia(opaOrigen, monto)) {
-                                                    */
-                                                            /*=======================REGLAS DE NEGOCIO==================================*/
-                                                            //Valido que la cuenta origen para CSN esat un grupo de retiro configurado
-                                                            if (util2.obtenerOrigen(em).contains("SANNICOL")) {
-                                                                //Buscamos que el producto origen pertenezca al grupo de retiro
-                                                                Tablas tb = util2.busquedaTabla(em, "bankingly_banca_movil", "grupo_retiro");
-                                                                System.out.println("tb:" + tb);
-                                                                if (ctaOrigen.getIdgrupo() == Integer.parseInt(tb.getDato1())) {
-                                                                    //Ahora verifico que el destino perteneneza al grupo de depositos
-                                                                    Tablas tbRetiro = util2.busquedaTabla(em, "bankingly_banca_movil", "grupo_deposito");
-                                                                    String cadena[] = tbRetiro.getDato1().split("\\|");
-                                                                    List list = Arrays.asList(cadena);
-                                                                    for (int i = 0; i < list.size(); i++) {
-                                                                        if (ctaOrigen.getIdgrupo() == Integer.parseInt(String.valueOf(list.get(i)))) {
-                                                                            banderaGrupo = true;
-                                                                        }
+                                                     */
+ /*=======================REGLAS DE NEGOCIO==================================*/
+                                                    //Valido que la cuenta origen para CSN esat un grupo de retiro configurado
+                                                    if (util2.obtenerOrigen(em).contains("SANNICOL")) {
+                                                        if (ctaDestino.getAuxiliaresPK().getIdproducto() == Integer.parseInt(tablaProductoTDD.getDato1())) {
+                                                            //Por si el destino es TDD 
+                                                            message = message + " A TERCERO TDD ";
+                                                        }
+                                                        //Buscamos que el producto origen pertenezca al grupo de retiro
+                                                        Tablas tb = util2.busquedaTabla(em, "bankingly_banca_movil", "grupo_retiro");
+
+                                                        if (ctaOrigen.getIdgrupo() == Integer.parseInt(tb.getDato1())) {
+                                                            //Ahora verifico que el destino perteneneza al grupo de depositos
+                                                            Tablas tbRetiro = util2.busquedaTabla(em, "bankingly_banca_movil", "grupo_deposito");
+                                                            String cadena[] = tbRetiro.getDato1().split("\\|");
+                                                            List list = Arrays.asList(cadena);
+                                                            for (int i = 0; i < list.size(); i++) {
+                                                                if (ctaOrigen.getIdgrupo() == Integer.parseInt(String.valueOf(list.get(i)))) {
+                                                                    banderaGrupo = true;
+                                                                }
+                                                            }
+                                                            if (banderaGrupo) {
+                                                                Tablas tbDeposito = util2.busquedaTabla(em, "bankingly_banca_movil", "productos_deposito");
+                                                                String productos_deposito[] = tbDeposito.getDato2().split("\\|");
+                                                                List list_deposito = Arrays.asList(productos_deposito);
+                                                                for (int i = 0; i < list_deposito.size(); i++) {
+                                                                    if (ctaDestino.getAuxiliaresPK().getIdproducto() == Integer.parseInt(String.valueOf(list_deposito.get(i)))) {
+                                                                        banderaProductosDeposito = true;
                                                                     }
-                                                                    if (banderaGrupo) {
-                                                                        //valido que el producto acepte depositos
-                                                                        Tablas tbDeposito = util2.busquedaTabla(em, "bankingly_banca_movil", "productos_deposito");
-                                                                        String productos_deposito[] = tbDeposito.getDato2().split("\\|");
-                                                                        List list_deposito = Arrays.asList(productos_deposito);
-                                                                        for (int i = 0; i < list_deposito.size(); i++) {
-                                                                            if (ctaDestino.getAuxiliaresPK().getIdproducto() == Integer.parseInt(String.valueOf(list_deposito.get(i)))) {
-                                                                                banderaProductosDeposito = true;
+                                                                }
+                                                                if (banderaProductosDeposito) {
+                                                                    if (ctaDestino.getIdgrupo() == 20 || ctaDestino.getIdgrupo() == 25) {
+                                                                        //Deposito en pesos mexicanos menores
+                                                                        Tablas tb_menores_permitido_diario = util2.busquedaTabla(em, "bankingly_banca_movil", "total_deposito_diario_menores");
+                                                                        //Total en udis
+                                                                        Tablas tb_menores_udis_mensual = util2.busquedaTabla(em, "bankingly_banca_movil", "total_udis_mensual_menores");
+                                                                        //Deposito en pesos mexicanos juveniles
+                                                                        Tablas tb_juveniles_permitido_diario = util2.busquedaTabla(em, "bankingly_banca_movil", "total_deposito_diario_juveniles");
+                                                                        //Deposito en udis juveniles
+                                                                        Tablas tb_juveniles_udis_mensual = util2.busquedaTabla(em, "bankingly_banca_movil", "total_udis_mensual_juveniles");
+
+                                                                        //Obtengo la fecha de trabajo
+                                                                        Query query_fecha_trabajo = em.createNativeQuery("SELECT to_char(fechatrabajo,'yyyy/mm/dd') FROM origenes limit 1");
+
+                                                                        String fecha_trabajo = String.valueOf(query_fecha_trabajo.getSingleResult());
+
+                                                                        //tb_precio_udi en el periodo
+                                                                        Tablas tb_precio_udi_periodo = util2.busquedaTabla(em, "valor_udi", fecha_trabajo.substring(0, 7).replace("\\/", ""));
+
+                                                                        //Construyo la consulta para buscar el monto diario de un menor o juvenil
+                                                                        String consulta_permitido_diario = "select sum(monto) from auxiliares_d"
+                                                                                + " inner join auxiliares a using(idorigenp,idproducto,idauxiliar)"
+                                                                                + " inner join productos using(idproducto)"
+                                                                                + " where estatus=2"
+                                                                                + " and a.idorigen=" + ctaDestino.getIdorigen()
+                                                                                + " and idgrupo=" + ctaDestino.getIdgrupo()
+                                                                                + " and idsocio=" + ctaDestino.getIdsocio()
+                                                                                + " and tipoproducto=0"
+                                                                                + " and cargoabono=1"
+                                                                                + " and date(fecha)='" + fecha_trabajo + "' and cargoabono=1";//(SELECT to_char(fechatrabajo,'yyyymm') from origenes limit 1)";
+
+                                                                        //Construyo consulta para buscar el total de depositos en el mes 
+                                                                        String consulta_udis_permitido = "select sum(monto) from auxiliares_d"
+                                                                                + " inner join auxiliares a using(idorigenp,idproducto,idauxiliar)"
+                                                                                + " inner join productos using(idproducto)"
+                                                                                + " where estatus=2"
+                                                                                + " and a.idorigen=" + ctaDestino.getIdorigen()
+                                                                                + " and idgrupo=" + ctaDestino.getIdgrupo()
+                                                                                + " and idsocio=" + ctaDestino.getIdsocio()
+                                                                                + " and tipoproducto=0"
+                                                                                + " and cargoabono=1"
+                                                                                + " and periodo='" + fecha_trabajo.substring(0, 7).replace("\\/", "") + "' and cargoabono=1";//(SELECT to_char(fechatrabajo,'yyyymm') from origenes limit 1)";
+
+                                                                        Query monto_permitido_diario = null;
+                                                                        double monto_diario = 0;
+                                                                        Query udis_mensual = null;
+                                                                        double monto_udis_mensual = 0;
+                                                                        System.out.println("consulta_deposito_diario:" + consulta_permitido_diario);
+                                                                        System.out.println("Consulta_udis_mensual:" + consulta_udis_permitido);
+
+                                                                        //Si el grupo es un menor
+                                                                        if (ctaDestino.getIdgrupo() == 20) {
+                                                                            //Busco si lo que se le permite a un menor dirario no es mayor a lo que hay en la tabla  
+                                                                            try {
+                                                                                monto_permitido_diario = em.createNativeQuery(consulta_permitido_diario);
+                                                                                monto_diario = Double.parseDouble(String.valueOf(monto_permitido_diario.getSingleResult()));
+                                                                            } catch (Exception e) {
+                                                                                monto_diario = 0.0;
+                                                                            }
+                                                                            if ((monto_diario + monto) <= Double.parseDouble(tb_menores_permitido_diario.getDato1())) {
+                                                                                //Ahora busco todos los movimientos para saber el total de usdis
+                                                                                //Busco la tabla donde esta el total de udis
+                                                                                try {
+                                                                                    udis_mensual = em.createNativeQuery(consulta_udis_permitido);
+                                                                                    monto_udis_mensual = Double.parseDouble(String.valueOf(udis_mensual.getSingleResult())) * Double.parseDouble(tb_precio_udi_periodo.getDato1());
+                                                                                } catch (Exception e) {
+                                                                                    monto_udis_mensual = 0;
+                                                                                }
+
+                                                                                if (monto_udis_mensual <= Double.parseDouble(tb_menores_udis_mensual.getDato1())) {
+                                                                                    message = " VALIDADO CON EXITO";
+                                                                                } else {
+                                                                                    message = "MONTO EN UDIS TRASPASA AL PERMITIDO POR MES";
+                                                                                }
+
+                                                                            } else {
+                                                                                message = "EL MONTO DIARIO PERMITIDO TRASPASA AL PERMITIDO";
+                                                                            }
+
+                                                                        } else if (ctaDestino.getIdgrupo() == 25) {//Si es un juvenil
+                                                                            //Busco si lo que se le permite a un menor dirario no es mayor a lo que hay en la tabla  
+                                                                            try {
+                                                                                monto_permitido_diario = em.createNativeQuery(consulta_permitido_diario);
+                                                                                monto_diario = Double.parseDouble(String.valueOf(monto_permitido_diario.getSingleResult()));
+                                                                            } catch (Exception e) {
+                                                                                monto_diario = 0.0;
+                                                                            }
+
+                                                                            if ((monto_diario + monto) <= Double.parseDouble(tb_juveniles_permitido_diario.getDato1())) {
+                                                                                //Ahora busco todos los movimientos para saber el total de usdis
+                                                                                //Busco la tabla donde esta el total de udis
+                                                                                try {
+                                                                                    udis_mensual = em.createNativeQuery(consulta_udis_permitido);
+                                                                                    monto_udis_mensual = Double.parseDouble(String.valueOf(udis_mensual.getSingleResult())) * Double.parseDouble(tb_precio_udi_periodo.getDato1());
+                                                                                } catch (Exception e) {
+                                                                                    monto_udis_mensual = 0;
+                                                                                }
+
+                                                                                if (monto_udis_mensual <= Double.parseDouble(tb_juveniles_udis_mensual.getDato1())) {
+                                                                                    message = " VALIDADO CON EXITO";
+                                                                                } else {
+                                                                                    message = "MONTO EN UDIS TRASPASA AL PERMITIDO POR MES";
+                                                                                }
+
+                                                                            } else {
+                                                                                message = "EL MONTO DIARIO PERMITIDO TRASPASA AL PERMITIDO";
                                                                             }
                                                                         }
-                                                                        if (banderaProductosDeposito) {
-                                                                            message = message + " VALIDADO CON EXITO";
-                                                                        } else {
-                                                                            message = "PRODUCTO NO CONFIGURADO PARA RECIBIR DEPOSITOS";
-                                                                        }
-                                                                    } else {
-                                                                        message = "GRUPO NO CONFIGURADO PARA DEPOSITOS";
+                                                                    } else {//el resto
+                                                                        message = message + " VALIDADO CON EXITO";
                                                                     }
+
                                                                 } else {
-                                                                    message = "SOCIO NO PERTENECE AL GRUPO DE RETIRO";
+                                                                    message = "PRODUCTO NO CONFIGURADO PARA RECIBIR DEPOSITOS";
                                                                 }
-                                                                ///Terminan validaciones para CSN
                                                             } else {
-                                                                message = "VALIDADO CON EXITO";
+                                                                message = "GRUPO NO CONFIGURADO PARA DEPOSITOS";
                                                             }
-                                                       /* } else {
+                                                        } else {
+                                                            message = "SOCIO NO PERTENECE AL GRUPO DE RETIRO";
+                                                        }
+                                                        ///Terminan validaciones para CSN
+                                                    } else {
+                                                        message = "VALIDADO CON EXITO";
+                                                    }
+                                                    /* } else {
                                                             message = "MONTO TRASPASA EL PERMITIDO DIARIO";
                                                         }
                                                     } else {
@@ -928,10 +1311,10 @@ public abstract class FacadeTransaction<T> {
                                     }
 
                                 } else {
-                                    message = "FONDOS INSUFICIENTES PARA COMPLETAR LA TRANSACCION";
+                                    message = "PRODUCTO DESTINO NO EXISTE";
                                 }
                             } else {
-                                message = "PRODUCTO DESTINO NO EXISTE";
+                                message = "FONDOS INSUFICIENTES PARA COMPLETAR LA TRANSACCION";
                             }
                         } else {
                             message = "PRODUCTO ORIGEN INACTIVO";
@@ -950,7 +1333,7 @@ public abstract class FacadeTransaction<T> {
             message = e.getMessage();
             System.out.println("Errro al validar transferencia a terceros:" + e.getMessage());
             return message;
-        }finally{
+        } finally {
             em.close();
         }
         return message.toUpperCase();
@@ -999,12 +1382,12 @@ public abstract class FacadeTransaction<T> {
                 if (util2.obtenerOrigen(em).contains("SANNICOLAS")) {
                     Tablas tablaProductoTDD = new TarjetaDeDebito().productoTddwebservice(em);
                     //Si el pago del prestamo se esta haciendo desde la TDD
-                    if (ctaOrigen.getAuxiliaresPK().getIdproducto() == Integer.parseInt(tablaProductoTDD.getDato2())) {
+                    if (ctaOrigen.getAuxiliaresPK().getIdproducto() == Integer.parseInt(tablaProductoTDD.getDato1())) {
                         WsSiscoopFoliosTarjetasPK1 foliosPK = new WsSiscoopFoliosTarjetasPK1(ctaOrigen.getAuxiliaresPK().getIdorigenp(), ctaOrigen.getAuxiliaresPK().getIdproducto(), ctaOrigen.getAuxiliaresPK().getIdauxiliar());
                         WsSiscoopFoliosTarjetas1 tarjetas = new TarjetaDeDebito().buscaTarjetaTDD(foliosPK.getIdorigenp(), foliosPK.getIdproducto(), foliosPK.getIdauxiliar(), em);
                         try {
                             System.out.println("consultando saldo para idtarjeta:" + tarjetas.getIdtarjeta());
-                            BalanceQueryResponseDto saldoTDD = new TarjetaDeDebito().saldoTDD(tarjetas.getWsSiscoopFoliosTarjetasPK(), em);
+                            BalanceQueryResponseDto saldoTDD = new TarjetaDeDebito().saldoTDD(tarjetas.getWsSiscoopFoliosTarjetasPK());
                             message = "TDD";
                             saldo = saldoTDD.getAvailableAmount();
 
@@ -1067,91 +1450,89 @@ public abstract class FacadeTransaction<T> {
                                         if (validador_cuentas_destino) {
                                             //Valido que el producto destino tercero sea un prestamo
                                             if (productoDestino.getTipoproducto() == 2) {
+
+
                                                 //valido el minimo o maximo para banca movil
                                                 /*if (minMax(monto).toUpperCase().contains("VALIDO")) {
                                                     //Valido el monto maximo por dia
                                                     if (MaxPordia(opaOrigen, monto)) {
-                                                  */      if (monto <= Double.parseDouble(ctaDestino.getSaldo().toString())) {
-                                                            if (monto > 0) {
-                                                                /*=======================REGLAS DE NEGOCIO==================================*/
-                                                                //Valido que la cuenta origen para CSN esta un grupo de retiro configurado
-                                                                if (util2.obtenerOrigen(em).toUpperCase().contains("SANNICOL")) {
-                                                                    System.out.println("entro a csn");
-                                                                    //Buscamos que el producto origen pertenezca al grupo de retiro
-                                                                    Tablas tb = util2.busquedaTabla(em, "bankingly_banca_movil", "grupo_retiro");
-                                                                    if (ctaOrigen.getIdgrupo() == Integer.parseInt(tb.getDato1())) {
-                                                                        //Ahora verifico que el destino perteneneza al grupo de depositos
-                                                                        Tablas tbRetiro = util2.busquedaTabla(em, "bankingly_banca_movil", "grupo_deposito");
-                                                                        String cadena[] = tbRetiro.getDato1().split("\\|");
-                                                                        List list = Arrays.asList(cadena);
-                                                                        System.out.println("pasoooooo : ");
-                                                                        for (int i = 0; i < list.size(); i++) {
-                                                                            if (ctaOrigen.getIdgrupo() == Integer.parseInt(String.valueOf(list.get(i)))) {
-                                                                                banderaGrupo = true;
-                                                                            }
+                                                 */ if (monto <= Double.parseDouble(ctaDestino.getSaldo().toString())) {
+                                                    if (monto > 0) {
+                                                        /*=======================REGLAS DE NEGOCIO==================================*/
+                                                        //Valido que la cuenta origen para CSN esta un grupo de retiro configurado
+                                                        if (util2.obtenerOrigen(em).toUpperCase().contains("SANNICOL")) {
+                                                            System.out.println("entro a csn");
+                                                            //Buscamos que el producto origen pertenezca al grupo de retiro
+                                                            Tablas tb = util2.busquedaTabla(em, "bankingly_banca_movil", "grupo_retiro");
+                                                            if (ctaOrigen.getIdgrupo() == Integer.parseInt(tb.getDato1())) {
+                                                                //Ahora verifico que el destino perteneneza al grupo de depositos
+                                                                Tablas tbRetiro = util2.busquedaTabla(em, "bankingly_banca_movil", "grupo_deposito");
+                                                                String cadena[] = tbRetiro.getDato1().split("\\|");
+                                                                List list = Arrays.asList(cadena);
+                                                                for (int i = 0; i < list.size(); i++) {
+                                                                    if (ctaOrigen.getIdgrupo() == Integer.parseInt(String.valueOf(list.get(i)))) {
+                                                                        banderaGrupo = true;
+                                                                    }
+                                                                }
+                                                                if (banderaGrupo) {
+                                                                    //valido que el producto acepte depositos
+                                                                    Tablas tbDeposito = util2.busquedaTabla(em, "bankingly_banca_movil", "productos_deposito");
+                                                                    System.out.println("Tabla encontrada y siguiendo:" + tbDeposito);
+
+                                                                    String productos_deposito[] = tbDeposito.getDato2().split("\\|");
+                                                                    List list_deposito = Arrays.asList(productos_deposito);
+                                                                    for (int i = 0; i < list_deposito.size(); i++) {
+                                                                        if (ctaDestino.getAuxiliaresPK().getIdproducto() == Integer.parseInt(String.valueOf(list_deposito.get(i)))) {
+                                                                            banderaProductosDeposito = true;
                                                                         }
-                                                                        if (banderaGrupo) {
-                                                                            //valido que el producto acepte depositos
-                                                                            Tablas tbDeposito = util2.busquedaTabla(em, "bankingly_banca_movil", "productos_deposito");
-                                                                            System.out.println("Tabla encontrada y siguiendo:"+tbDeposito);
-                                                                            
-                                                                            String productos_deposito[] = tbDeposito.getDato2().split("\\|");
-                                                                            List list_deposito = Arrays.asList(productos_deposito);
-                                                                            System.out.println("dentro de for");
-                                                                            for (int i = 0; i < list_deposito.size(); i++) {
-                                                                                if (ctaDestino.getAuxiliaresPK().getIdproducto() == Integer.parseInt(String.valueOf(list_deposito.get(i)))) {
-                                                                                    banderaProductosDeposito = true;
-                                                                                }
-                                                                            }
-                                                                            System.out.println("sgiienxcdvlxvnxclv");
-                                                                            if (banderaProductosDeposito) {
-                                                                                //Para CSN el producto de prestamos ya sea tercero o propio no debe estar en Moroso
-                                                                               /* String b_cartera = "SELECT cartera FROM carteravencida WHERE "
+                                                                    }
+                                                                    if (banderaProductosDeposito) {
+                                                                        //Para CSN el producto de prestamos ya sea tercero o propio no debe estar en Moroso
+                                                                        /* String b_cartera = "SELECT cartera FROM carteravencida WHERE "
                                                                                         + " idorigenp=" + ctaDestino.getAuxiliaresPK().getIdorigenp()
                                                                                         + " AND idproducto=" + ctaDestino.getAuxiliaresPK().getIdproducto()
                                                                                         + " AND idauxiliar=" + ctaDestino.getAuxiliaresPK().getIdauxiliar();
 
                                                                                 Query query_cartera = em.createNativeQuery(b_cartera);*/
-                                                                               
-                                                                               String fechaTrabajo = "SELECT date(fechatrabajo) FROM origenes limit 1";
-                                                                               Query queryOrigenes = em.createNativeQuery(fechaTrabajo);
-                                                                               String fechaTrabajoReal = String.valueOf(queryOrigenes.getSingleResult());
-                                                                               String fecha[] = fechaTrabajoReal.split("-");
-                                                                               LocalDate date = LocalDate.of(Integer.parseInt(fecha[0]), Integer.parseInt(fecha[1]), Integer.parseInt(fecha[2]));
-                                                                               
-                                                                               String sai_aux_cartera = "SELECT sai_auxiliar(" + ctaDestino.getAuxiliaresPK().getIdorigenp() + "," + ctaDestino.getAuxiliaresPK().getIdproducto() + "," + ctaDestino.getAuxiliaresPK().getIdauxiliar() + ",'" + date + "')";
-                                                                               Query RsSai = em.createNativeQuery(sai_aux_cartera);
-                                                                               String sai_aux = RsSai.getSingleResult().toString();
-                                                                               String[] parts = sai_aux.split("\\|");                                                                               
-                                                                               List list_sai = Arrays.asList(parts);
-                                                                               
-                                                                               
-                                                                                String cartera =list_sai.get(13).toString(); //String.valueOf(query_cartera.getSingleResult());
-                                                                                if (cartera.toUpperCase().equals("M") || cartera.toUpperCase().contains("V")) {
-                                                                                    message = "ESTATUS DE PRODUCTO:"+cartera;
-                                                                                } else {                                                                                    
-                                                                                    message = message + " VALIDADO CON EXITO";
-                                                                                }
-                                                                            } else {
-                                                                                message = "PRODUCTO NO CONFIGURADO PARA RECIBIR DEPOSITOS";
-                                                                            }
-                                                                        } else {
-                                                                            message = "GRUPO NO CONFIGURADO PARA RECIBIR DEPOSITOS";
-                                                                        }
-                                                                    } else {
-                                                                        message = "SOCIO NO PERTENECE AL GRUPO DE RETIRO";
-                                                                    }
 
+                                                                        String fechaTrabajo = "SELECT date(fechatrabajo) FROM origenes limit 1";
+                                                                        Query queryOrigenes = em.createNativeQuery(fechaTrabajo);
+                                                                        String fechaTrabajoReal = String.valueOf(queryOrigenes.getSingleResult());
+                                                                        String fecha[] = fechaTrabajoReal.split("-");
+                                                                        LocalDate date = LocalDate.of(Integer.parseInt(fecha[0]), Integer.parseInt(fecha[1]), Integer.parseInt(fecha[2]));
+
+                                                                        String sai_aux_cartera = "SELECT sai_auxiliar(" + ctaDestino.getAuxiliaresPK().getIdorigenp() + "," + ctaDestino.getAuxiliaresPK().getIdproducto() + "," + ctaDestino.getAuxiliaresPK().getIdauxiliar() + ",'" + date + "')";
+                                                                        Query RsSai = em.createNativeQuery(sai_aux_cartera);
+                                                                        String sai_aux = RsSai.getSingleResult().toString();
+                                                                        String[] parts = sai_aux.split("\\|");
+                                                                        List list_sai = Arrays.asList(parts);
+
+                                                                        String cartera = list_sai.get(13).toString(); //String.valueOf(query_cartera.getSingleResult());
+                                                                        // if (cartera.toUpperCase().equals("M") || cartera.toUpperCase().contains("V")) {
+                                                                        //   message = "ESTATUS DE PRODUCTO:" + cartera;
+                                                                        //} else {
+                                                                        message = message + " VALIDADO CON EXITO";
+                                                                        // }
+                                                                    } else {
+                                                                        message = "PRODUCTO NO CONFIGURADO PARA RECIBIR DEPOSITOS";
+                                                                    }
                                                                 } else {
-                                                                    message = "VALIDADO CON EXITO";
+                                                                    message = "GRUPO NO CONFIGURADO PARA RECIBIR DEPOSITOS";
                                                                 }
                                                             } else {
-                                                                message = "NO SE PUEDEN PAGAR SALDO NEGATIVO";
+                                                                message = "SOCIO NO PERTENECE AL GRUPO DE RETIRO";
                                                             }
+
                                                         } else {
-                                                            message = "EL SALDO QUE INTENTA PAGAR SOBREPASA A LA DEUDA";
+                                                            message = "VALIDADO CON EXITO";
                                                         }
-                                                   /* } else {
+                                                    } else {
+                                                        message = "NO SE PUEDEN PAGAR SALDO NEGATIVO";
+                                                    }
+                                                } else {
+                                                    message = "EL SALDO QUE INTENTA PAGAR SOBREPASA A LA DEUDA";
+                                                }
+                                                /* } else {
                                                         message = "MONTO TRASPASA EL PERMITIDO DIARIO";
                                                     }
                                                 } else {
@@ -1190,7 +1571,7 @@ public abstract class FacadeTransaction<T> {
             message = e.getMessage();
             System.out.println("Error al realizar pago a prestamo:" + e.getMessage());
             return message;
-        }finally{
+        } finally {
             em.close();
         }
         System.out.println("el mensaje es:" + message);
@@ -1242,14 +1623,14 @@ public abstract class FacadeTransaction<T> {
                             System.out.println("El producto para Tarjeta de debito es:" + tablaProductoTDD);
 
                             //Si el retiro debe ser de Tarjeta de debito
-                            if (folio_origen_.getAuxiliaresPK().getIdproducto() == Integer.parseInt(tablaProductoTDD.getDato2())) {
+                            if (folio_origen_.getAuxiliaresPK().getIdproducto() == Integer.parseInt(tablaProductoTDD.getDato1())) {
                                 WsSiscoopFoliosTarjetasPK1 foliosPK = new WsSiscoopFoliosTarjetasPK1(folio_origen_.getAuxiliaresPK().getIdorigenp(), folio_origen_.getAuxiliaresPK().getIdproducto(), folio_origen_.getAuxiliaresPK().getIdauxiliar());
                                 //Busco el folio de la tarjeta de debito
                                 WsSiscoopFoliosTarjetas1 tarjeta = new TarjetaDeDebito().buscaTarjetaTDD(foliosPK.getIdorigenp(), foliosPK.getIdproducto(), foliosPK.getIdauxiliar(), em);
                                 try {
                                     System.out.println("consultando saldo para idtarjeta:" + tarjeta.getIdtarjeta());
                                     //Obtengo el saldo desde ws de el idTarjeta encontrada
-                                    BalanceQueryResponseDto saldo_tarjeta_de_debito = new TarjetaDeDebito().saldoTDD(tarjeta.getWsSiscoopFoliosTarjetasPK(), em);
+                                    BalanceQueryResponseDto saldo_tarjeta_de_debito = new TarjetaDeDebito().saldoTDD(tarjeta.getWsSiscoopFoliosTarjetasPK());
                                     message = "TDD";
                                     saldo = saldo_tarjeta_de_debito.getAvailableAmount();
                                     System.out.println("Saldo de la tarjeta de debito es:" + saldo);
@@ -1274,26 +1655,26 @@ public abstract class FacadeTransaction<T> {
                                         //verifico que el saldo del producto origen es mayor o igual a lo que se intenta transferir(saldo obtenido desde WS de Alestra)
                                         //Sumamos el moto de comision+el monto a enviar
                                         //Buscamos el registro en tablas
-                                        Tablas tb_comision_spei = util2.busquedaTabla(em, "bankingly_banca_movil", "comision_spei");
-                                        double total_pago = orden.getMonto() + (Double.parseDouble(tb_comision_spei.getDato1()) * 0.16);//El monto de comision por el IVA
+                                        //Tablas tb_comision_spei = util2.busquedaTabla(em, "bankingly_banca_movil", "cuenta_spei_comisiones");
+                                        double total_pago = orden.getMonto();//+ Double.parseDouble(tb_comision_spei.getDato2()) + ((Double.parseDouble(tb_comision_spei.getDato2())) * 0.16);//El monto de comision por el IVA
                                         if (saldo >= total_pago) {
                                             //valido el minimo o maximo para banca movil
-                                           /* if (minMax(orden.getMonto()).toUpperCase().contains("VALIDO")) {
+                                            /* if (minMax(orden.getMonto()).toUpperCase().contains("VALIDO")) {
                                                 //Valido el monto maximo por dia
                                                 if (MaxPordia(orden.getClienteClabe(), orden.getMonto())) {
                                              */       //Valido que la cuenta origen para CSN esat un grupo de retiro configurado
-                                                    if (util2.obtenerOrigen(em).contains("SANNICOL")) {
-                                                        //Buscamos que el producto origen pertenezca al grupo de retiro
-                                                        Tablas tb = util2.busquedaTabla(em, "bankingly_banca_movil", "grupo_retiro");
-                                                        if (folio_origen_.getIdgrupo() == Integer.parseInt(tb.getDato1())) {
-                                                            message = message + " VALIDADO CON EXITO";
-                                                        } else {
-                                                            message = "SOCIO NO PERTENECE AL GRUPO DE RETIRO";
-                                                        }
-                                                    } else {
-                                                        message = "VALIDADO CON EXITO";
-                                                    }
-                                                /*} else {
+                                            if (util2.obtenerOrigen(em).contains("SANNICOL")) {
+                                                //Buscamos que el producto origen pertenezca al grupo de retiro
+                                                Tablas tb = util2.busquedaTabla(em, "bankingly_banca_movil", "grupo_retiro");
+                                                if (folio_origen_.getIdgrupo() == Integer.parseInt(tb.getDato1())) {
+                                                    message = message + " VALIDADO CON EXITO";
+                                                } else {
+                                                    message = "SOCIO NO PERTENECE AL GRUPO DE RETIRO";
+                                                }
+                                            } else {
+                                                message = "VALIDADO CON EXITO";
+                                            }
+                                            /*} else {
                                                     message = "MONTO TRASPASA EL PERMITIDO DIARIO";
                                                 }
                                             } else {
@@ -1349,7 +1730,7 @@ public abstract class FacadeTransaction<T> {
             message = e.getMessage();
             System.out.println("Error al realizar tranferenciasSPEI:" + e.getMessage());
             return message;
-        }finally{
+        } finally {
             em.close();
         }
         return message.toUpperCase();
@@ -1357,7 +1738,7 @@ public abstract class FacadeTransaction<T> {
 
     //Se consume un servicio que yo desarrolle donde consumo API STP en caso de CSN si alguuien mas usara SPEI desarrollaria otro proyecto especficamente para la caja
     private ResponseSPEIDTO metodoEnviarSPEI(RequestDataOrdenPagoDTO orden) {
-        System.out.println("Entrando a metodo para enviar orden SPEI");
+        System.out.println("Entrando a metodo para enviar orden SPEIsssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss");
         URL urlEndpoint = null;
         String output = "";
         String salida = "";
@@ -1418,12 +1799,11 @@ public abstract class FacadeTransaction<T> {
             }
             conn.disconnect();
         } catch (Exception ex) {
-            response.setId(500);
+            response.setId(-50);
             System.out.println("Error en conectar al EndPoint SPEI:" + ex.getMessage());
-            response.setError("GENERAL:" + ex.getMessage());
-
+            response.setError("ERROR AL ENVIAR LA ORDEN SPEI");
             return response;
-        }finally{
+        } finally {
             em.close();
         }
         return response;
@@ -1447,7 +1827,7 @@ public abstract class FacadeTransaction<T> {
         } catch (Exception e) {
 
             System.out.println("Error al validar monto min-max:" + e.getMessage());
-        }finally{
+        } finally {
             em.close();
         }
         return mensaje;
@@ -1523,7 +1903,7 @@ public abstract class FacadeTransaction<T> {
         } catch (Exception e) {
 
             System.out.println("Error al validar permitido diario:" + e.getMessage());
-        }finally{
+        } finally {
             em.close();
         }
         return false;
@@ -1554,7 +1934,7 @@ public abstract class FacadeTransaction<T> {
             }
         } catch (Exception e) {
             System.out.println("Error al verificar el horario de actividad");
-        }finally{
+        } finally {
             em.close();
         }
 
@@ -1571,7 +1951,7 @@ public abstract class FacadeTransaction<T> {
             WsSiscoopFoliosTarjetas1 tarjeta = null;
             //Buscamos el producto para TDD en tablas 
             Tablas tablaProductoTDD = new TarjetaDeDebito().productoTddwebservice(em);
-            System.out.println("Producto_para_tarjeta_de_debito:" + tablaProductoTDD.getDato2());
+            System.out.println("Producto_para_tarjeta_de_debito:" + tablaProductoTDD.getDato1());
             //Busco el producto configurado para retiros
             Tablas tabla_retiro = util2.busquedaTabla(em, "bankingly_banca_movil", "producto_retiro");
             System.out.println("Producto para retiro es:" + tabla_retiro.getDato1());
@@ -1580,14 +1960,12 @@ public abstract class FacadeTransaction<T> {
             OpaDTO opaOrigen = util.opa(transactionOWN.getDebitProductBankIdentifier());
             //Si el producto configurado para retiros no es la tdd entra aqui
             if (opaOrigen.getIdproducto() == Integer.parseInt(tabla_retiro.getDato1())) {
-                System.out.println("Es el producto configurado para retiro");
                 try {
                     //Si la tdd es el producto conffgurado para              retiros
-                    if (Integer.parseInt(tablaProductoTDD.getDato2()) == Integer.parseInt(tabla_retiro.getDato1())) {
+                    if (Integer.parseInt(tablaProductoTDD.getDato1()) == Integer.parseInt(tabla_retiro.getDato1())) {
                         //Verifico que la activar tdd este en 1--activado
-                        Tablas activa_tdd = util2.busquedaTabla(em, "bankingly_banca_movil", "activar_tdd");
-                        if (Integer.parseInt(activa_tdd.getDato1()) == 1) {
-                            System.out.println("si es la TDD");
+                        Tablas activa_tdd = util2.busquedaTabla(em, "bankingly_banca_movil", "activa_tdd");
+                        if (Integer.parseInt(activa_tdd.getDato2()) == 1) {
                             try {
                                 //Buscando la tarjeta de debito 
                                 tarjeta = new TarjetaDeDebito().buscaTarjetaTDD(opaOrigen.getIdorigenp(), opaOrigen.getIdproducto(), opaOrigen.getIdauxiliar(), em);
@@ -1614,6 +1992,7 @@ public abstract class FacadeTransaction<T> {
                                     //Terceros dentro de la entidad
                                     if (identificadorTransferencia == 2) {
                                         System.out.println("Es una transferencia a tercero dentro de la entidad");
+
                                         mensaje = validarTransferenciaATerceros(transactionOWN.getDebitProductBankIdentifier(),
                                                 transactionOWN.getAmount(),
                                                 transactionOWN.getCreditProductBankIdentifier(),
@@ -1638,7 +2017,7 @@ public abstract class FacadeTransaction<T> {
                             } else {
                                 mensaje = "NO EXISTE FOLIO PARA LA TARJETA DE DEBITO";
                             }
-                        }else{
+                        } else {
                             mensaje = "POR FAVOR SOLICITE QUE SE ACTIVE EL USO DE TARJETA DE DEBITO";
                         }
                     } else {//Solo para pruebas
@@ -1681,7 +2060,7 @@ public abstract class FacadeTransaction<T> {
             mensaje = e.getMessage();
 
             return mensaje.toUpperCase();
-        }finally{
+        } finally {
             em.close();
         }
         return mensaje.toUpperCase();

@@ -102,7 +102,6 @@ public abstract class FacadeCustomer<T> {
         1.- persona fisica buscamos por Curp
         2.- persona moral RFC
          */
-        System.out.println("llegoooooooooooooooooooooooooooooooooooooooooooooo");
         if (LastName.replace(" ", "").toUpperCase().contains("Ñ")) {
             LastName = LastName.toUpperCase().replace("Ñ", "%");
         }
@@ -168,9 +167,8 @@ public abstract class FacadeCustomer<T> {
                     + " AND (CASE WHEN celular IS NULL THEN '' ELSE trim(celular) END)='" + CellPhone + "' LIMIT 1";
 
         } else {*/
-        System.out.println("entro aquiiii");
         consulta = "SELECT * FROM personas p WHERE "
-                + "replace((p." + IdentClientType.toUpperCase() + "),' ','')='" + documentId.replace(" ", "").trim() + "'"
+                + "  replace(upper(p." + IdentClientType.toUpperCase() + "),' ','')='" + documentId.replace(" ", "").trim().toUpperCase() + "'"
                 + " AND UPPER(REPLACE(p.nombre,' ',''))='" + Name.toUpperCase().replace(" ", "").trim() + "'"
                 + " AND UPPER(appaterno)||''||UPPER(p.apmaterno) LIKE ('%" + LastName.toUpperCase().replace(" ", "") + "%')"
                 + " AND (CASE WHEN email IS NULL THEN '' ELSE trim(email) END)='" + Mail + "'"
@@ -212,30 +210,29 @@ public abstract class FacadeCustomer<T> {
                 //-- Debe tener activo producto 133 y tener minimo de saldo 50 pesos
                 if (util.obtenerOrigen(em).replace(" ", "").contains("SANNICOLAS")) {
                     //Buscamos que el socio tenga el producto 133 y con el saldo de 50 pesos
+                    Tablas tb_producto_tdd=util.busquedaTabla(em,"bankingly_banca_movil","producto_tdd");
                     try {
-
                         //Buscamos que en la tdd tenga minimo 50 pesos de saldo leemos el ws de Alestra
                         String busqueda133 = "SELECT * FROM auxiliares a WHERE idorigen=" + idorigen
                                 + " AND idgrupo=" + idgrupo
                                 + " AND idsocio=" + idsocio
-                                + " AND idproducto=" + tablaProducto.getDato2() + " AND estatus=2";
+                                + " AND idproducto=" + Integer.parseInt(tb_producto_tdd.getDato1()) + " AND estatus=2";
                         Query auxiliar = em.createNativeQuery(busqueda133, Auxiliares.class);
                         Auxiliares aa = (Auxiliares) auxiliar.getSingleResult();
 
                         WsSiscoopFoliosTarjetasPK1 foliosPK = new WsSiscoopFoliosTarjetasPK1(aa.getAuxiliaresPK().getIdorigenp(), aa.getAuxiliaresPK().getIdproducto(), aa.getAuxiliaresPK().getIdauxiliar());
 
                         double saldo = 0.0;
-                        BalanceQueryResponseDto saldoWS = new TarjetaDeDebito().saldoTDD(foliosPK, em);
+                        BalanceQueryResponseDto saldoWS = new TarjetaDeDebito().saldoTDD(foliosPK);
                         if (saldoWS.getCode() >= 1) {
                             saldo = saldoWS.getAvailableAmount();
                             // SaldoTddPK saldoTddPK = new SaldoTddPK(a.getAuxiliaresPK().getIdorigenp(), a.getAuxiliaresPK().getIdproducto(), a.getAuxiliaresPK().getIdauxiliar());
                             // new TarjetaDeDebito().actualizarSaldoTDD(saldoTddPK, saldo, em);
-                        } else {
-                           
+                        } else {                           
                             System.out.println("Error al consumir web service para saldo de TDD");
                         }
 
-                        if (saldo >= Double.parseDouble(tablaProducto.getDato3())) {
+                        if (saldo >= Double.parseDouble(tb_producto_tdd.getDato2())) {
                             //S tiene el saldoque se encesita en la tdd
                             //Ahora verificamos que no se un socio bloqueado buscamos en la lista sopar
                             Tablas tb_sopar = util.busquedaTabla(em, "bankingly_banca_movil", "sopar");
@@ -248,10 +245,10 @@ public abstract class FacadeCustomer<T> {
                                 bandera = true;
                             }
                         } else {
-                            mensaje = "PRODUCTO " + tablaProducto.getDato2() + " NO CUMPLE CON EL SALDO MINIMO";
+                            mensaje = "PRODUCTO " + tablaProducto.getDato1() + " NO CUMPLE CON EL SALDO MINIMO";
                         }
                     } catch (Exception e) {
-                        mensaje = "PRODUCTO " + tablaProducto.getDato2() + " NO ESTA ACTIVO";
+                        mensaje = "PRODUCTO " + tablaProducto.getDato1() + " NO ESTA ACTIVO";
                         System.out.println("Error al buscar el producto 133" + e.getMessage());
                     }
                 } else {

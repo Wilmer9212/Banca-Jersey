@@ -5,24 +5,32 @@
  */
 package com.fenoreste.rest.ResponseDTO;
 
-import java.time.LocalDateTime;
 
 /**
  *
  * @author Elliot
  */
 public class LoanRate {
-
+    
+    private int id;
     private String initialDate;
     private Double rate;
 
     public LoanRate() {
     }
-    
-    
-    public LoanRate(String initialDate, Double rate) {
+
+    public LoanRate(int id, String initialDate, Double rate) {
+        this.id = id;
         this.initialDate = initialDate;
         this.rate = rate;
+    }
+
+    public int getId() {
+        return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
     }
 
     public String getInitialDate() {
@@ -41,13 +49,11 @@ public class LoanRate {
         this.rate = rate;
     }
 
-   
-
     @Override
     public String toString() {
-        return "LoanRate{" + "initialDate=" + initialDate + ", rate=" + rate + '}';
+        return "LoanRate{" + "id=" + id + ", initialDate=" + initialDate + ", rate=" + rate + '}';
     }
-
+    
     
 
 }

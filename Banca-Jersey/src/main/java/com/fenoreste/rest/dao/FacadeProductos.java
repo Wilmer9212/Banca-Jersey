@@ -50,6 +50,8 @@ import java.util.List;
 import javax.persistence.EntityManager;
 import javax.persistence.Query;
 import javax.xml.namespace.QName;
+import org.eclipse.persistence.config.CacheUsage;
+import org.eclipse.persistence.config.QueryHints;
 import wssyctdd.SiscoopTDD;
 
 public abstract class FacadeProductos<T> {
@@ -76,7 +78,7 @@ public abstract class FacadeProductos<T> {
             }
             System.out.println("Consulta:" + consulta);
             Query query = em.createNativeQuery(consulta, Auxiliares.class);
-            List<Auxiliares> ListaA = query.getResultList();
+            List<Auxiliares> ListaA = query.setHint(QueryHints.CACHE_USAGE,CacheUsage.DoNotCheckCache).getResultList();
 
             for (int i = 0; i < ListaA.size(); i++) {
                 ProductsDTO auxi = new ProductsDTO();
@@ -105,6 +107,17 @@ public abstract class FacadeProductos<T> {
                 } catch (Exception ex) {
                     sttt = 0;
                 }
+                String canTransact="";
+                
+                if(util2.obtenerOrigen(em).toUpperCase().replace(" ","").contains("SANNICOLAS")){
+                   Tablas producto_retiro=util2.busquedaTabla(em,"bankingly_banca_movil","producto_retiro");
+                   if(a.getAuxiliaresPK().getIdproducto()==Integer.parseInt(producto_retiro.getDato1())){
+                       canTransact="3";
+                   }else{
+                       canTransact = "2";
+                   }
+                }
+                
                 auxi = new ProductsDTO(
                         og + s,
                         op + aa,
@@ -112,8 +125,9 @@ public abstract class FacadeProductos<T> {
                         sttt,
                         productTypeId,
                         descripcion,
-                        "1",
+                        canTransact,//Solo lo que se puede hacer en el producto
                         "1");
+                
                 ListagetP.add(auxi);
                 productTypeId = "";
                 descripcion = "";
@@ -160,12 +174,12 @@ public abstract class FacadeProductos<T> {
                         //Buscamo la tdd
                         Tablas tablaTDD = util2.busquedaTabla(em, "bankingly_banca_movil", "producto_tdd");
                         //Si el producto es la TDD obtenemos el saldo del WEB SErvice de Alestra
-                        if (a.getAuxiliaresPK().getIdproducto() == Integer.parseInt(tablaTDD.getDato2())) {
+                        if (a.getAuxiliaresPK().getIdproducto() == Integer.parseInt(tablaTDD.getDato1())) {
                             //Buscamos registros de folio para obtener el id tarjeta                       
                             WsSiscoopFoliosTarjetasPK1 foliosPK = new WsSiscoopFoliosTarjetasPK1(a.getAuxiliaresPK().getIdorigenp(), a.getAuxiliaresPK().getIdproducto(), a.getAuxiliaresPK().getIdauxiliar());
                             try {
                                 saldo = new BigDecimal(0);
-                                BalanceQueryResponseDto saldoWS = new TarjetaDeDebito().saldoTDD(foliosPK, em);
+                                BalanceQueryResponseDto saldoWS = new TarjetaDeDebito().saldoTDD(foliosPK);
                                 if (saldoWS.getCode() >= 1) {
                                     saldo = new BigDecimal(saldoWS.getAvailableAmount());
                                     // SaldoTddPK saldoTddPK = new SaldoTddPK(a.getAuxiliaresPK().getIdorigenp(), a.getAuxiliaresPK().getIdproducto(), a.getAuxiliaresPK().getIdauxiliar());
@@ -173,11 +187,9 @@ public abstract class FacadeProductos<T> {
                                 } else {
                                     System.out.println("Error al consumir web service para saldo de TDD");
                                 }
-
                             } catch (Exception e) {
                                 System.out.println("Error en consultar tdd:" + e.getMessage());
                             }
-
                         }
                     }
                     String vencimiento = "";
@@ -188,16 +200,23 @@ public abstract class FacadeProductos<T> {
 
                     //Busco el producto en el catalogo de cuentas baniingly
                     Productos_bankingly tipo_cuenta_bankingly = em.find(Productos_bankingly.class, a.getAuxiliaresPK().getIdproducto());
-
+                    
                     //si es una inversion porque los datos en el sai_auxilair lo da de diferente manera por eso identificamos que sea una inversion
                     if (tipo_cuenta_bankingly.getProductTypeId() == 4) {
                         try {
-                            Query query_inversiones_sai = em.createNativeQuery("SELECT sai_auxiliar(" + a.getAuxiliaresPK().getIdorigenp() + ","
-                                    + a.getAuxiliaresPK().getIdproducto() + "," + a.getAuxiliaresPK().getIdauxiliar() + ",(SELECT date(fechatrabajo) FROM origenes LIMIT 1))");
+                            String sai_inversion_find="SELECT sai_auxiliar(" + a.getAuxiliaresPK().getIdorigenp() + ","
+                                    + a.getAuxiliaresPK().getIdproducto() + "," + a.getAuxiliaresPK().getIdauxiliar() + ",(SELECT date(fechatrabajo) FROM origenes LIMIT 1))";
+                            
+                            Query query_inversiones_sai = em.createNativeQuery(sai_inversion_find);
                             String sai_inversion = (String) query_inversiones_sai.getSingleResult();
+                            
+                            System.out.println("Ssai:"+sai_inversion_find);
                             String[] partes_sai_inversiones = sai_inversion.split("\\|");
                             List lista_posciones_sai_inversiones = Arrays.asList(partes_sai_inversiones);
-                            vencimiento = String.valueOf(lista_posciones_sai_inversiones.get(2));
+                            String[]partes_fecha_vencimiento=lista_posciones_sai_inversiones.get(2).toString().split("/");
+                            
+                            vencimiento =partes_fecha_vencimiento[2]+"-"+partes_fecha_vencimiento[1]+"-"+partes_fecha_vencimiento[0];// String.valueOf(lista_posciones_sai_inversiones.get(2).toString().replace("/","-"));
+                            
                             tasa = Double.parseDouble(a.getTasaio().toString());
 
                         } catch (Exception e) {

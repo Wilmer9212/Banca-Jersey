@@ -64,9 +64,9 @@ public abstract class FacadeAccounts<T> {
             //Leemos ws de TDD Alestra
             TarjetaDeDebito wsTDD = new TarjetaDeDebito();
             Tablas productoWs = new TarjetaDeDebito().productoTddwebservice(em);
-            if (util2.obtenerOrigen(em).contains("SANNICOLAS") && Integer.parseInt(productoWs.getDato2()) == aux.getAuxiliaresPK().getIdproducto()) {
+            if (util2.obtenerOrigen(em).contains("SANNICOLAS") && Integer.parseInt(productoWs.getDato1()) == aux.getAuxiliaresPK().getIdproducto()) {
                 WsSiscoopFoliosTarjetasPK1 foliosPK = new WsSiscoopFoliosTarjetasPK1(aux.getAuxiliaresPK().getIdorigenp(), aux.getAuxiliaresPK().getIdproducto(), aux.getAuxiliaresPK().getIdauxiliar());
-                BalanceQueryResponseDto responseSaldo = wsTDD.saldoTDD(foliosPK, em);
+                BalanceQueryResponseDto responseSaldo = wsTDD.saldoTDD(foliosPK);
                 saldo24 = responseSaldo.getAvailableAmount();
                 saldo48 = responseSaldo.getAvailableAmount();
                 saldo = responseSaldo.getAvailableAmount();

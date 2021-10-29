@@ -34,17 +34,21 @@ public class LoanResources {
         System.out.println("Cadena:" + cadena);
         String productBankIdentifier = "";
         JsonObject Error = new JsonObject();
+        System.out.println("sisisiis");
         LoanDAO dao = new LoanDAO();
         if (!dao.actividad_horario()) {
             Error.put("ERROR", "VERIFIQUE SU HORARIO DE ACTIVIDAD FECHA,HORA O CONTACTE A SU PROVEEEDOR");
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(Error).build();
         }
+        System.out.println("pasoooooooooooooooooooooo");
         try {
             JSONObject jsonRecibido = new JSONObject(cadena);
             productBankIdentifier = jsonRecibido.getString("productBankIdentifier");
             int o = Integer.parseInt(productBankIdentifier.substring(0, 6));
             int p = Integer.parseInt(productBankIdentifier.substring(6, 11));
             int a = Integer.parseInt(productBankIdentifier.substring(11, 19));
+            System.out.println("xiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii");
+            System.out.println(""+o+"-"+p+"-"+a);
             if (dao.tipoproducto(p) != 2) {
                 Error.put("Error", "Producto no valido para LOANS");
                 return Response.status(Response.Status.BAD_REQUEST).entity(Error).build();
@@ -54,7 +58,7 @@ public class LoanResources {
             pageSize = json.getInt("pageSize");
             pageStartIndex = json.getInt("pageStartIndex");*/
         } catch (Exception e) {
-            Error.put("Error", "Error en parametros JSON");
+            Error.put("Error", "Error en parametros JSON:"+e.getMessage());
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(Error).build();
         }
 
@@ -211,14 +215,13 @@ public class LoanResources {
             Error.put("Error", "Error en parametros JSON:" + e.getMessage());
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(Error).build();
         }
-
-        int count = 0;
         try {
             List<LoanRate> loan = dao.LoanRates(productBankIdentifier, pageSize, pageStartIndex);
+            System.out.println("Loan reta:"+loan);
             JsonObject j = new JsonObject();
-            int t = 3;
+            
             j.put("Rates", loan);
-            j.put("LoanRatesCount", t);
+            j.put("LoanRatesCount", loan.size());
             return Response.status(Response.Status.OK).entity(j).build();
         } catch (Exception e) {
             Error.put("Error", "SOCIOS NO ENCONTRADOS");

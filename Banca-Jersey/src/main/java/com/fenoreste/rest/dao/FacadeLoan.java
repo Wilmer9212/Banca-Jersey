@@ -28,6 +28,7 @@ import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
+import java.util.Random;
 import javax.persistence.EntityManager;
 import javax.persistence.EntityTransaction;
 import javax.persistence.Query;
@@ -73,7 +74,7 @@ public abstract class FacadeLoan<T> {
                         currentBalance,//Saldo o balance actual del prestamo
                         currentRate,//Tasa de interes aplicada al prestamo
                         RSFeesDue(opa.getIdorigenp(), opa.getIdproducto(), opa.getIdauxiliar()),//Cantidad de cuotas vencidas
-                        RSFeesDueData(opa.getIdorigenp(), opa.getIdproducto(), opa.getIdauxiliar()),//Campo FeesDueData   Informacion sobre el vencimiento de las cuotas
+                        RSFeesDueData(opa.getIdorigenp(), opa.getIdproducto(), opa.getIdauxiliar(), aux.getTipoamortizacion()),//Campo FeesDueData   Informacion sobre el vencimiento de las cuotas
                         loanStatusId, //Estatus del prestamo
                         nextFee(opa.getIdorigenp(), opa.getIdproducto(), opa.getIdauxiliar()), //Informacion sobre la proxima cuota
                         Double.parseDouble(aux.getMontoprestado().toString()),
@@ -256,7 +257,7 @@ public abstract class FacadeLoan<T> {
             }
 
         } catch (Exception e) {
-            System.out.println("Error en LoanFee:" + e.getMessage());
+            System.out.println("Error en LoanFee 1:" + e.getMessage());
         } finally {
             em.close();
         }
@@ -266,9 +267,9 @@ public abstract class FacadeLoan<T> {
 
     public List<LoanRate> LoanRates(String productBankIdentifier, int pageSize, int pageStartIndex) {
         EntityManager em = AbstractFacade.conexion();
-        LoanRate loanRate = null;
         OpaDTO opa = util.opa(productBankIdentifier);
         List<LoanRate> listaRates = new ArrayList<>();
+        //Consulto tasas
         try {
             String consulta = "SELECT fechaactivacion,tasaio,tasaim,tasaiod FROM auxiliares WHERE"
                     + " idorigenp=" + opa.getIdorigenp() + " AND"
@@ -278,20 +279,16 @@ public abstract class FacadeLoan<T> {
 
             Query queryA = em.createNativeQuery(consulta);
             List<Object[]> MiLista = queryA.getResultList();
-            System.out.println("siiiiiiiiiiiiiiiiii pasoooooooooo");
-            try {
-                EntityTransaction tr1 = em.getTransaction();
-                tr1.begin();
-                em.createNativeQuery("DELETE FROM loanrates WHERE opa='" + opa.getIdorigenp() + "-" + opa.getIdproducto() + "-" + opa.getIdauxiliar() + "'").executeUpdate();
-                if (tr1.isActive()) {
-                    tr1.commit();
-                }
-            } catch (Exception e) {
-                System.out.println("Error en eliminar:" + e.getMessage());
-            }
-            System.out.println("aunuuuu pasoooooooooooooooooo");
+            
+            //limpio tablas
+               String vaciar_tabla_tasas="DELETE FROM loanrates";    
+               em.getTransaction().begin();
+               em.createNativeQuery(vaciar_tabla_tasas).executeUpdate();  
+               em.getTransaction().commit();
+            
             LocalDateTime now = LocalDateTime.now();
-            System.out.println("nowcccccccccccccccccccccccccccccccccccccc:" + String.valueOf(now) + "Z");
+            
+            //corro mi lista de tasas
             for (Object[] lista : MiLista) {
 
                 for (int x = 0; x < lista.length; x++) {
@@ -300,17 +297,14 @@ public abstract class FacadeLoan<T> {
                             System.out.println("Listax:" + lista[x]);
                             double xc = Double.parseDouble(lista[x].toString());
 
-                            EntityTransaction tr = em.getTransaction();
                             LoanRates lor = new LoanRates();
-                            tr.begin();
+                            em.getTransaction().begin();
+                            lor.setId(numero());
                             lor.setOpa(opa.getIdorigenp() + "-" + opa.getIdproducto() + "-" + opa.getIdauxiliar());
                             lor.setInitialdate(lista[0].toString());
                             lor.setRate(xc);
                             em.persist(lor);
-                            if (tr.isActive()) {
-                                tr.commit();
-                                em.clear();
-                            }
+                            em.getTransaction().commit();
                         } catch (Exception e) {
                             System.out.println("Error:" + e.getMessage());
                         }
@@ -319,14 +313,17 @@ public abstract class FacadeLoan<T> {
             }
 
             try {
+                //Recupero tasas para el opa
                 String c = "SELECT * FROM loanrates WHERE opa='" + opa.getIdorigenp() + "-" + opa.getIdproducto() + "-" + opa.getIdauxiliar() + "'";
                 Query queryLoan = em.createNativeQuery(c, LoanRates.class);
                 queryLoan.setFirstResult(pageStartIndex);
                 queryLoan.setMaxResults(pageSize);
                 List<LoanRates> listaRatess = queryLoan.getResultList();
                 String converted = "";//String.valueOf(convertToLocalDateTimeViaInstant(amm.getVence())+":00.000Z");
+                System.out.println("Total de la lista:" + listaRates.size());
                 for (int j = 0; j < listaRatess.size(); j++) {
-
+                    
+                    LoanRate loanRate = new LoanRate();
                     LoanRates loanrtt = listaRatess.get(j);
                     String str = "2016-03-04 11:30:40";
                     DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -334,48 +331,29 @@ public abstract class FacadeLoan<T> {
                     DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
                     LocalDateTime localDate = LocalDateTime.parse("2021-10-07" + " 00:00:00", dtf);
                     converted = loanrtt.getInitialdate() + "T00:00:00.000Z";////String.valueOf(convertToLocalDateTimeViaInstant(.getInitialdate()))+":00.000Z");
-                    loanRate = new LoanRate(/*String.valueOf(String.valueOf(now)+"Z")*/converted, loanrtt.getRate());
-                    System.out.println("LoanRattt:" + loanrtt);
+                   
+                    
+                    loanRate.setId(numero());
+                    loanRate.setRate(loanrtt.getRate());
+                    loanRate.setInitialDate(converted);
                     listaRates.add(loanRate);
                 }
-                System.out.println("ListaRte:" + listaRates);
             } catch (Exception e) {
                 System.out.println("Error en obtener loanRates:" + e.getMessage());
             }
-            /*Map<Integer, String> map = IntStream
-                    .range(pageStartIndex, listaRates.size())
-                    .boxed()
-                    .collect(groupingBy(
-                            i -> i / pageSize,
-                            mapping(i -> listaRates.get((int) i).toString(), joining(","))
-                    ));
-            
-            ObjectMapper mapper = new ObjectMapper();
-            ArrayList<String> list = new ArrayList<String>(map.values());
-            
-            String[]arreglo=map.get(pageStartIndex).split("},");
-            System.out.println("listaReal:"+arreglo);
-            for(int j=0;j<arreglo.length;j++){
-                String[]jk=arreglo[j].split(",");
-                String initialDates=jk[0];
-                String rates=jk[1];
-                String[]rate=rates.split("=");
-                String[] initialDate=initialDates.split("=");
-                String initialDateR=initialDate[1];
-                Double rateR=Double.parseDouble(rate[1].replace("}",""));
-                LoanRate loanrr=new LoanRate(initialDateR,rateR);
-                loanr.add(loanrr);
-                
-            }
-             */
-
         } catch (Exception e) {
 
-            System.out.println("Error en LoanFee:" + e.getMessage());
+            System.out.println("Error en LoanRates:" + e.getMessage());
         }
         em.close();
 
         return listaRates;
+    }
+
+    public int numero() {
+        Random r = new Random();
+        int valorDado = r.nextInt(6) + 1;
+        return valorDado;
     }
 
     public List<LoanPayment> loanPayments(String productBankIdentifier, int pageSize, int startPageIndex) {
@@ -467,7 +445,7 @@ public abstract class FacadeLoan<T> {
     }
 
     //Obetner cuota vencida
-    public FeesDueData RSFeesDueData(int o, int p, int a) {
+    public FeesDueData RSFeesDueData(int o, int p, int a, int tipoamortizacion) {
         EntityManager em = AbstractFacade.conexion();
         String sai_auxiliar = "SELECT * FROM sai_auxiliar(" + o + "," + p + "," + a + ",(SELECT date(fechatrabajo) FROM origenes limit 1))";
         FeesDueData FeesDueDataRS = null;
@@ -477,18 +455,59 @@ public abstract class FacadeLoan<T> {
             String[] parts = sai.split("\\|");
             List list = Arrays.asList(parts);
 
-            Double iovencido = Double.parseDouble(list.get(6).toString()) + Double.parseDouble(list.get(17).toString());
+            /*Double iovencido = Double.parseDouble(list.get(6).toString()) + Double.parseDouble(list.get(17).toString());
             Double imvencido = Double.parseDouble(list.get(15).toString()) + Double.parseDouble(list.get(18).toString());
-            Double montovencido = Double.parseDouble(list.get(4).toString());
-            Double mnttotalcv = iovencido + imvencido + montovencido;
-            System.out.println("Iovencido:" + iovencido + ", imvencido:" + imvencido + ",montovencido:" + montovencido + "Total vencido:" + mnttotalcv);
+            Double montovencido =  Double.parseDouble(list.get(4).toString());
+            Double mnttotalcv = iovencido + imvencido + montovencido;*/
+            //Para obtener el total de la proxima cuota  total corro la funcion de pago completo
+            String sai_bankingly_prestamo_cuanto = "SELECT sai_bankingly_prestamo_cuanto(" + o + ","
+                    + p + ","
+                    + a + ","
+                    + "(SELECT date(fechatrabajo) FROM origenes limit 1)" + ","
+                    + tipoamortizacion + ",'" + sai + "')";
+            System.out.println("Cadena sai prestao cuento:" + sai_bankingly_prestamo_cuanto);
 
-            FeesDueDataRS = new FeesDueData(
-                    iovencido,
-                    Double.parseDouble(list.get(6).toString()),
-                    imvencido,
-                    montovencido,
-                    mnttotalcv);
+            Double interestAmount = 0.0, OverDueAmount = 0.0, principalAmount = 0.0, othersAmount = 0.0, principalAmountTotal = 0.0, intereses_creciente_adelanto = 0.0;
+
+            String sai_adelanto_de_interes = "SELECT sai_bankingly_monto_adelanto_interes(" + o + "," + p + "," + a + ",(SELECT date(fechatrabajo) FROM origenes limit 1),'" + sai + "')";
+            System.out.println("calculo de intereses:" + sai_adelanto_de_interes);
+
+            try {
+                Query calculo_adelanto_intereses = em.createNativeQuery(sai_adelanto_de_interes);
+                intereses_creciente_adelanto = Double.parseDouble(String.valueOf(calculo_adelanto_intereses.getSingleResult()));
+            } catch (Exception e) {
+            }
+
+            try {
+                Query query_sai_bankingly_prestamo_cuanto = em.createNativeQuery(sai_bankingly_prestamo_cuanto);
+                String cadena_cuanto_prestamo = query_sai_bankingly_prestamo_cuanto.getSingleResult().toString();
+                String[] partes_cuanto_prestamo = cadena_cuanto_prestamo.split("\\|");
+                List lista_posiciones_cuanto_prestamo = Arrays.asList(partes_cuanto_prestamo);
+                //mnttotalcv = Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(0)));
+
+                principalAmountTotal = Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(1)))
+                        + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(2)))
+                        + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(3)))
+                        + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(4)))
+                        + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(5)))
+                        + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(6)))
+                        + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(7))) + intereses_creciente_adelanto;
+
+                interestAmount = Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(3))) + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(4)));
+                OverDueAmount = Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(5))) + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(6)));
+                principalAmount = Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(2))) + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(7))) + intereses_creciente_adelanto;
+
+            } catch (Exception e) {
+
+            }
+
+            FeesDueDataRS = new FeesDueData();
+            FeesDueDataRS.setFeesDueInterestAmount(interestAmount);
+            FeesDueDataRS.setFeesDueOthersAmount(othersAmount);
+            FeesDueDataRS.setFeesDueOverdueAmount(OverDueAmount);
+            FeesDueDataRS.setFeesDuePrincipalAmount(principalAmount);
+            FeesDueDataRS.setFeesDueTotalAmount(principalAmountTotal);
+
             System.out.println("FeesDueData:" + FeesDueDataRS);
         } catch (Exception e) {
             System.out.println("Error en FeesDueData:" + e.getMessage());
@@ -537,14 +556,22 @@ public abstract class FacadeLoan<T> {
             List list = Arrays.asList(parts);
             Query query_next_fee = null;
             Amortizaciones amm = null;
-            Double imvencido = 0.0, iovencido = 0.0, montoCuota = 0.0;
-            
-            
-            //::io_calculado+iva_io_total
-            iovencido = Double.parseDouble(list.get(6).toString()) + Double.parseDouble(list.get(17).toString());
-            imvencido = Double.parseDouble(list.get(15).toString()) + Double.parseDouble(list.get(18).toString());
+            Double imvencido = 0.0, iovencido = 0.0, montoCuota = 0.0, intereses_creciente_adelanto = 0.0;
+            Double interestAmount = 0.0, OverDueAmount = 0.0, principalAmount = 0.0, othersAmount = 0.0;
 
-            
+            //::io_calculado+iva_io_total
+            /*iovencido = Double.parseDouble(list.get(6).toString()) + Double.parseDouble(list.get(17).toString());
+            imvencido = Double.parseDouble(list.get(15).toString()) + Double.parseDouble(list.get(18).toString());*/
+            //Calculo adelanto de interese para prestamos crecientes y si es hipotecario me devuelve 0 la funcion
+            String sai_adelanto_de_interes = "SELECT sai_bankingly_monto_adelanto_interes(" + o + "," + p + "," + a + ",(SELECT date(fechatrabajo) FROM origenes limit 1),'" + sai + "')";
+            System.out.println("calculo de intereses:" + sai_adelanto_de_interes);
+
+            try {
+                Query calculo_adelanto_intereses = em.createNativeQuery(sai_adelanto_de_interes);
+                intereses_creciente_adelanto = Double.parseDouble(String.valueOf(calculo_adelanto_intereses.getSingleResult()));
+            } catch (Exception e) {
+            }
+
             int idamortizacion = 0;
             int estatus_amortizacion = 0;//El estatus de la amortizacion
             if (list.get(13).toString().equals("C")) {
@@ -552,10 +579,25 @@ public abstract class FacadeLoan<T> {
                 String consultaA = "SELECT * FROM amortizaciones WHERE idorigenp=" + o
                         + " AND idproducto=" + p
                         + " AND idauxiliar=" + a
-                        + " AND vence='" + list.get(10) + "'";
+                        + " AND vence='" + list.get(10) + "' limit 1";
                 System.out.println("consulta_amortizacion:" + consultaA);
                 query_next_fee = em.createNativeQuery(consultaA, Amortizaciones.class);
                 amm = (Amortizaciones) query_next_fee.getSingleResult();
+
+                //Verifico los seguros hipotecarios
+                /*try {
+                    String consulta_seguros_hipotecarios = "SELECT COALESCE(sum(apagar+ivaapagar),0) FROM "
+                                                     + " sai_prestamos_hipotecarios_calcula_seguro_a_pagar("+aux.getAuxiliaresPK().getIdorigenp()+","
+                                                                                                            +aux.getAuxiliaresPK().getIdproducto()+","
+                                                                                                            +aux.getAuxiliaresPK().getIdauxiliar()+","
+                                                    +"(SELECT date(fechatrabajo) FROM origenes limit 1))";
+                    System.out.println("Consulta seguros hipotecarios:"+consulta_seguros_hipotecarios);
+                    Query query_seguros_hipotecarios=em.createNativeQuery(consulta_seguros_hipotecarios);
+                    seguros_hipotecarios=Double.parseDouble(String.valueOf(query_seguros_hipotecarios.getSingleResult()));
+                    
+                } catch (Exception e) {
+                    seguros_hipotecarios = 0.0;
+                }*/
                 if (Double.parseDouble(amm.getAbono().toString()) == Double.parseDouble(amm.getAbonopag().toString())) {
                     estatus_amortizacion = 3;
                 } else if (Double.parseDouble(amm.getAbono().toString()) > Double.parseDouble(amm.getAbonopag().toString()) && amm.getTodopag() == false) {
@@ -563,12 +605,10 @@ public abstract class FacadeLoan<T> {
                 } else if (!list.get(13).toString().equals("C")) {//Si esta vencido
                     estatus_amortizacion = 2;
                 }
-                montoCuota = Double.parseDouble(String.valueOf(list.get(11))) + Double.parseDouble(String.valueOf(list.get(4))) + iovencido + imvencido;
                 idamortizacion = amm.getAmortizacionesPK().getIdamortizacion();
                 //Double montovencido = Double.parseDouble(list.get(4).toString());
             } else {
-                //montoCuota = Double.parseDouble(String.valueOf(list.get(5)));//Double.parseDouble(String.valueOf(total_a_cubrir_hoy.getSingleResult())) + iovencido + imvencido;
-                montoCuota = Double.parseDouble(String.valueOf(list.get(11))) + iovencido + imvencido;
+                System.out.println("Entro aqui");
                 //Obtengo el idamortizacion que no hay que cubrir
                 String consulta_id_amortizaciones = "SELECT idamortizacion FROM amortizaciones WHERE idorigenp=" + o
                         + " AND idproducto=" + p
@@ -579,16 +619,46 @@ public abstract class FacadeLoan<T> {
                 idamortizacion = Integer.parseInt(String.valueOf(id_amortizacion.getSingleResult()));
 
             }
-           
+
+            //Para obtener el total de la proxima cuota  total corro la funcion de pago completo
+            String sai_bankingly_prestamo_cuanto = "SELECT sai_bankingly_prestamo_cuanto(" + aux.getAuxiliaresPK().getIdorigenp() + ","
+                    + aux.getAuxiliaresPK().getIdproducto() + ","
+                    + aux.getAuxiliaresPK().getIdauxiliar() + ","
+                    + "(SELECT date(fechatrabajo) FROM origenes limit 1)" + ","
+                    + aux.getTipoamortizacion() + ",'" + sai + "')";
+            System.out.println("Cadena sai prestao cuento:" + sai_bankingly_prestamo_cuanto);
+            try {
+                Query query_sai_bankingly_prestamo_cuanto = em.createNativeQuery(sai_bankingly_prestamo_cuanto);
+                String cadena_cuanto_prestamo = query_sai_bankingly_prestamo_cuanto.getSingleResult().toString();
+                String[] partes_cuanto_prestamo = cadena_cuanto_prestamo.split("\\|");
+                List lista_posiciones_cuanto_prestamo = Arrays.asList(partes_cuanto_prestamo);
+                montoCuota = Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(1)))
+                        + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(2)))
+                        + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(3)))
+                        + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(4)))
+                        + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(5)))
+                        + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(6)))
+                        + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(7)))
+                        + intereses_creciente_adelanto;
+
+                interestAmount = Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(3))) + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(4)));
+                OverDueAmount = Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(5))) + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(6)));
+                principalAmount = Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(2))) + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(7)));
+                othersAmount = Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(1))) + intereses_creciente_adelanto;
+            } catch (Exception e) {
+
+            }
+
+            //montoCuota = Double.parseDouble(String.valueOf(list.get(11))) + Double.parseDouble(String.valueOf(list.get(4))) + iovencido + imvencido + seguros_hipotecarios;
             //Double abonoT = Double.parseDouble(amm.getAbono().toString()) + iovencido + imvencido;
             loanFee.setCapitalBalance(Double.parseDouble(aux.getSaldo().toString()));//Saldo o balance actual del prestamo
             loanFee.setFeeNumber(idamortizacion);//(amm.getAmortizacionesPK().getIdorigenp() + amm.getAmortizacionesPK().getIdproducto() + amm.getAmortizacionesPK().getIdauxiliar() + amm.getAmortizacionesPK().getIdamortizacion());//Numero de cuota
-            loanFee.setPrincipalAmount(Double.parseDouble(String.valueOf(list.get(11)))+Double.parseDouble(String.valueOf(list.get(4))));//monto de la cuota
+            loanFee.setPrincipalAmount(principalAmount);//monto de la cuota
             loanFee.setDueDate(String.valueOf(list.get(10)));//fecha de vencimiento
-            loanFee.setInterestAmount(iovencido);//Monto de interes
-            loanFee.setOverdueAmount(imvencido);//Monto de mora
+            loanFee.setInterestAmount(interestAmount);//Monto de interes io + ivaio
+            loanFee.setOverdueAmount(OverDueAmount);//Monto im+ivaim
             loanFee.setFeeStatusId(estatus_amortizacion);//Estado de la amortizacion
-            loanFee.setOthersAmount(0.0);//Otros conceptos asociados
+            loanFee.setOthersAmount(othersAmount);//Otros conceptos asociados seguros si tiene hipotecario
             loanFee.setTotalAmount(montoCuota);//Monto total de la cuota
 
             /*loanFee = new LoanFee(
@@ -602,7 +672,7 @@ public abstract class FacadeLoan<T> {
                     Double.parseDouble(amm.getAbono().toString()),
                     abonoT);*/
         } catch (Exception e) {
-            System.out.println("Error en LoanFee:" + e.getMessage());
+            System.out.println("Error en obtener la prxima cuota:" + e.getMessage());
         } finally {
             em.close();
         }

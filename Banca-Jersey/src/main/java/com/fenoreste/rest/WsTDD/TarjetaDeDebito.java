@@ -80,20 +80,23 @@ public class TarjetaDeDebito {
             System.out.println("Error en buscaTarjetaTDD de WsSiscoopFoliosTarjetas: " + e.getMessage());
             return wsSiscoopFoliosTarjetas;
         }
+        System.out.println("Se encontro el foilio tdd:"+wsSiscoopFoliosTarjetas.getIdtarjeta());
         return wsSiscoopFoliosTarjetas;
     }
 
-    public BalanceQueryResponseDto saldoTDD(WsSiscoopFoliosTarjetasPK1 foliosPK, EntityManager em) {
+    public BalanceQueryResponseDto saldoTDD(WsSiscoopFoliosTarjetasPK1 foliosPK) {
         BalanceQueryResponseDto response = new BalanceQueryResponseDto();
+        EntityManager em=AbstractFacade.conexion();
         WsSiscoopFoliosTarjetas1 tarjeta = em.find(WsSiscoopFoliosTarjetas1.class, foliosPK);
         try {
             System.out.println("Estatus de la tarjeta de debito:" + tarjeta.getActiva());
             if (tarjeta.getActiva()) {
 
-                /*response.setAvailableAmount(20);                     
+                /*response.setAvailableAmount(20000);                     
                 response.setCode(1);
-                response.setDescription("activa");*/
-                response = conexionSiscoop().getSiscoop().getBalanceQuery(tarjeta.getIdtarjeta());
+                response.setDescription("activa");
+                */
+               response = conexionSiscoop().getSiscoop().getBalanceQuery(tarjeta.getIdtarjeta());
 
             } else {
                 response.setDescription("La tarjeta esta inactiva: " + tarjeta.getIdtarjeta());
@@ -101,37 +104,70 @@ public class TarjetaDeDebito {
         } catch (Exception e) {
             System.out.println("Error al buscar Saldo tdd:" + e.getMessage());
             response.setDescription("Tarjeta Inactiva");
+            em.close();
             return response;
         }
+        em.close();
         return response;
     }
 
-    public DoWithdrawalAccountResponse.Return retiroTDD(WsSiscoopFoliosTarjetas1 tarjeta, Double monto) {
+    public boolean retiroTDD(WsSiscoopFoliosTarjetas1 tarjeta, Double monto) {
+        LoadBalanceResponse.Return loadBalanceResponse = new LoadBalanceResponse.Return();
         DoWithdrawalAccountResponse.Return doWithdrawalAccountResponse = new DoWithdrawalAccountResponse.Return();
         System.out.println("WS...Restiro");
+        boolean retiro = false;
         try {
-            doWithdrawalAccountResponse.setBalance(200);
-            doWithdrawalAccountResponse.setCode(1);
-            //doWithdrawalAccountResponse=conexionSiscoop().getSiscoop().doWithdrawalAccount(tarjeta.getIdtarjeta(), monto);
+            if (tarjeta.getActiva()) {
+                /*doWithdrawalAccountResponse.setBalance(200);
+                doWithdrawalAccountResponse.setCode(1);
+                */
+                doWithdrawalAccountResponse = conexionSiscoop().getSiscoop().doWithdrawalAccount(tarjeta.getIdtarjeta(), monto);
+                if (doWithdrawalAccountResponse.getCode() == 0) {
+                    // 0 = Existe error
+                    //retiro = false;
+                    retiro=false;
+                } else {
+                    retiro = true;
+                }
+            }
         } catch (Exception e) {
-            return doWithdrawalAccountResponse;
+            retiro =  errorRetiroDespositoSYC(loadBalanceResponse, e);
         }
-        return doWithdrawalAccountResponse;
+        return retiro;
+    }
+
+    // REALIZA EL DEPOSITO DE LA TARJETA TDD
+    public boolean depositoTDD(WsSiscoopFoliosTarjetas1 tarjeta, Double monto) {
+        LoadBalanceResponse.Return loadBalanceResponse = new LoadBalanceResponse.Return();
+        boolean deposito = false;
+        if (tarjeta.getActiva()) {
+            try {                
+                loadBalanceResponse = conexionSiscoop().getSiscoop().loadBalance(tarjeta.getIdtarjeta(), monto);
+                if (loadBalanceResponse.getCode() == 0) {
+                    deposito = false;
+                } else {
+                    deposito = true;
+                }
+            } catch (Exception e) {
+                deposito = errorRetiroDespositoSYC(loadBalanceResponse, e);
+            }
+        }
+        return deposito;
     }
 
     public Siscoop_TDD conexionSiscoop() {
 //        EntityManagerFactory emf = AbstractFacade.conexion();
         EntityManager em = AbstractFacade.conexion();//      EntityManager em = emf.createEntityManager();
         Siscoop_TDD conexionWSTDD = null;
-        UtilidadesGenerales util=new UtilidadesGenerales();
+        UtilidadesGenerales util = new UtilidadesGenerales();
         try {
             //Tabla para obtener usuario y contraseña
-            Tablas crendenciales = util.busquedaTabla(em,"bankingly_banca_movil","wsdl_credenciales");
-            Tablas parametros = util.busquedaTabla(em,"bankingly_banca_movil","wsdl_parametros");            
+            Tablas crendenciales = util.busquedaTabla(em, "bankingly_banca_movil", "wsdl_credenciales");
+            Tablas parametros = util.busquedaTabla(em, "bankingly_banca_movil", "wsdl_parametros");
             if (parametros != null) {
                 System.out.println("Conectando ws ALestra....");
                 //1.-Usuario,2.-contraseña,3.-host,4.-puerto,5.-wsdl
-                conexionWSTDD = new consumo_tdd.Siscoop_TDD(crendenciales.getDato1(),crendenciales.getDato2(), parametros.getDato1(), parametros.getDato3(),parametros.getDato2());
+                conexionWSTDD = new consumo_tdd.Siscoop_TDD(crendenciales.getDato1(), crendenciales.getDato2(), parametros.getDato1(), parametros.getDato3(), parametros.getDato2());
                 //conexionWSTDD = new (parametros.getDato1(), parametros.getDato2());
 
             }

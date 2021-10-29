@@ -43,6 +43,7 @@ public class UtilidadesGenerales {
 
     public Tablas busquedaTabla(EntityManager em,String idtabla, String idelemento) {
        Tablas tb = null;
+        System.out.println("Buscando la tabla idtabla:"+idtabla+" idelemento:"+idelemento);
         try {
             TablasPK tbPK = new TablasPK(idtabla, idelemento);
             tb = em.find(Tablas.class, tbPK);
