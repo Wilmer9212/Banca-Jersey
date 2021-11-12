@@ -61,18 +61,5 @@ public class TestResources {
         
     }
     
-    
-    @GET
-    @Path("/testing")    
-    @Produces({MediaType.APPLICATION_JSON})
-    @Consumes({MediaType.APPLICATION_JSON})
-    public Response test(String cadenaJson) {
-        CustomerDAO dao=new CustomerDAO();
-        try {
-            dao.pruebasPrezzta();
-        } catch (Exception e) {
-           
-        }
-        return null;
-    }
+
 }

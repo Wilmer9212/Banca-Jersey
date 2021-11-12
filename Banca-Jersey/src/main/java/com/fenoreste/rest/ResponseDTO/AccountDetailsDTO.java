@@ -5,6 +5,9 @@
  */
 package com.fenoreste.rest.ResponseDTO;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
+
 /**
  *
  * @author wilmer
@@ -13,12 +16,12 @@ public class AccountDetailsDTO {
 
     private String AccountBankIdentifier;
     private String AccountOfficerName;
-    private Double AccountCountableBalance;
-    private Double AccountAvailableBalance;
-    private Double AccountBalance24Hrs;
-    private Double AccountBalance48Hrs;
-    private Double AccountBalance48MoreHrs;
-    private Double MonthlyAverageBalance;
+    private BigDecimal AccountCountableBalance;
+    private BigDecimal AccountAvailableBalance;
+    private BigDecimal AccountBalance24Hrs;
+    private BigDecimal AccountBalance48Hrs;
+    private BigDecimal AccountBalance48MoreHrs;
+    private BigDecimal MonthlyAverageBalance;
     private int PendingChecks;
     private int ChecksToReleaseToday;
     private int ChecksToReleaseTomorrow;
@@ -34,30 +37,6 @@ public class AccountDetailsDTO {
     private Boolean ShowCurrentAccountChecksInformation;
 
     public AccountDetailsDTO() {
-    }
-
-    public AccountDetailsDTO(String AccountBankIdentifier, String AccountOfficerName, Double AccountCountableBalance, Double AccountAvailableBalance, Double AccountBalance24Hrs, Double AccountBalance48Hrs, Double AccountBalance48MoreHrs, Double MonthlyAverageBalance, int PendingChecks, int ChecksToReleaseToday, int ChecksToReleaseTomorrow, int CancelledChecks, int CertifiedChecks, int RejectedChecks, int BlockedAmount, double MovementsOfTheMonth, int ChecksDrawn, Double Overdrafts, String ProductBranchName, String ProductOwnerName, Boolean ShowCurrentAccountChecksInformation) {
-        this.AccountBankIdentifier = AccountBankIdentifier;
-        this.AccountOfficerName = AccountOfficerName;
-        this.AccountCountableBalance = AccountCountableBalance;
-        this.AccountAvailableBalance = AccountAvailableBalance;
-        this.AccountBalance24Hrs = AccountBalance24Hrs;
-        this.AccountBalance48Hrs = AccountBalance48Hrs;
-        this.AccountBalance48MoreHrs = AccountBalance48MoreHrs;
-        this.MonthlyAverageBalance = MonthlyAverageBalance;
-        this.PendingChecks = PendingChecks;
-        this.ChecksToReleaseToday = ChecksToReleaseToday;
-        this.ChecksToReleaseTomorrow = ChecksToReleaseTomorrow;
-        this.CancelledChecks = CancelledChecks;
-        this.CertifiedChecks = CertifiedChecks;
-        this.RejectedChecks = RejectedChecks;
-        this.BlockedAmount = BlockedAmount;
-        this.MovementsOfTheMonth = MovementsOfTheMonth;
-        this.ChecksDrawn = ChecksDrawn;
-        this.Overdrafts = Overdrafts;
-        this.ProductBranchName = ProductBranchName;
-        this.ProductOwnerName = ProductOwnerName;
-        this.ShowCurrentAccountChecksInformation = ShowCurrentAccountChecksInformation;
     }
 
     public String getAccountBankIdentifier() {
@@ -76,51 +55,51 @@ public class AccountDetailsDTO {
         this.AccountOfficerName = AccountOfficerName;
     }
 
-    public Double getAccountCountableBalance() {
+    public BigDecimal getAccountCountableBalance() {
         return AccountCountableBalance;
     }
 
-    public void setAccountCountableBalance(Double AccountCountableBalance) {
+    public void setAccountCountableBalance(BigDecimal AccountCountableBalance) {
         this.AccountCountableBalance = AccountCountableBalance;
     }
 
-    public Double getAccountAvailableBalance() {
+    public BigDecimal getAccountAvailableBalance() {
         return AccountAvailableBalance;
     }
 
-    public void setAccountAvailableBalance(Double AccountAvailableBalance) {
+    public void setAccountAvailableBalance(BigDecimal AccountAvailableBalance) {
         this.AccountAvailableBalance = AccountAvailableBalance;
     }
 
-    public Double getAccountBalance24Hrs() {
+    public BigDecimal getAccountBalance24Hrs() {
         return AccountBalance24Hrs;
     }
 
-    public void setAccountBalance24Hrs(Double AccountBalance24Hrs) {
+    public void setAccountBalance24Hrs(BigDecimal AccountBalance24Hrs) {
         this.AccountBalance24Hrs = AccountBalance24Hrs;
     }
 
-    public Double getAccountBalance48Hrs() {
+    public BigDecimal getAccountBalance48Hrs() {
         return AccountBalance48Hrs;
     }
 
-    public void setAccountBalance48Hrs(Double AccountBalance48Hrs) {
+    public void setAccountBalance48Hrs(BigDecimal AccountBalance48Hrs) {
         this.AccountBalance48Hrs = AccountBalance48Hrs;
     }
 
-    public Double getAccountBalance48MoreHrs() {
+    public BigDecimal getAccountBalance48MoreHrs() {
         return AccountBalance48MoreHrs;
     }
 
-    public void setAccountBalance48MoreHrs(Double AccountBalance48MoreHrs) {
+    public void setAccountBalance48MoreHrs(BigDecimal AccountBalance48MoreHrs) {
         this.AccountBalance48MoreHrs = AccountBalance48MoreHrs;
     }
 
-    public Double getMonthlyAverageBalance() {
+    public BigDecimal getMonthlyAverageBalance() {
         return MonthlyAverageBalance;
     }
 
-    public void setMonthlyAverageBalance(Double MonthlyAverageBalance) {
+    public void setMonthlyAverageBalance(BigDecimal MonthlyAverageBalance) {
         this.MonthlyAverageBalance = MonthlyAverageBalance;
     }
 
@@ -230,9 +209,9 @@ public class AccountDetailsDTO {
 
     @Override
     public String toString() {
-        return "GetAccountDetailsDTO{" + "AccountBankIdentifier=" + AccountBankIdentifier + ", AccountOfficerName=" + AccountOfficerName + ", AccountCountableBalance=" + AccountCountableBalance + ", AccountAvailableBalance=" + AccountAvailableBalance + ", AccountBalance24Hrs=" + AccountBalance24Hrs + ", AccountBalance48Hrs=" + AccountBalance48Hrs + ", AccountBalance48MoreHrs=" + AccountBalance48MoreHrs + ", MonthlyAverageBalance=" + MonthlyAverageBalance + ", PendingChecks=" + PendingChecks + ", ChecksToReleaseToday=" + ChecksToReleaseToday + ", ChecksToReleaseTomorrow=" + ChecksToReleaseTomorrow + ", CancelledChecks=" + CancelledChecks + ", CertifiedChecks=" + CertifiedChecks + ", RejectedChecks=" + RejectedChecks + ", BlockedAmount=" + BlockedAmount + ", MovementsOfTheMonth=" + MovementsOfTheMonth + ", ChecksDrawn=" + ChecksDrawn + ", Overdrafts=" + Overdrafts + ", ProductBranchName=" + ProductBranchName + ", ProductOwnerName=" + ProductOwnerName + ", ShowCurrentAccountChecksInformation=" + ShowCurrentAccountChecksInformation + '}';
+        return "AccountDetailsDTO{" + "AccountBankIdentifier=" + AccountBankIdentifier + ", AccountOfficerName=" + AccountOfficerName + ", AccountCountableBalance=" + AccountCountableBalance + ", AccountAvailableBalance=" + AccountAvailableBalance + ", AccountBalance24Hrs=" + AccountBalance24Hrs + ", AccountBalance48Hrs=" + AccountBalance48Hrs + ", AccountBalance48MoreHrs=" + AccountBalance48MoreHrs + ", MonthlyAverageBalance=" + MonthlyAverageBalance + ", PendingChecks=" + PendingChecks + ", ChecksToReleaseToday=" + ChecksToReleaseToday + ", ChecksToReleaseTomorrow=" + ChecksToReleaseTomorrow + ", CancelledChecks=" + CancelledChecks + ", CertifiedChecks=" + CertifiedChecks + ", RejectedChecks=" + RejectedChecks + ", BlockedAmount=" + BlockedAmount + ", MovementsOfTheMonth=" + MovementsOfTheMonth + ", ChecksDrawn=" + ChecksDrawn + ", Overdrafts=" + Overdrafts + ", ProductBranchName=" + ProductBranchName + ", ProductOwnerName=" + ProductOwnerName + ", ShowCurrentAccountChecksInformation=" + ShowCurrentAccountChecksInformation + '}';
     }
-    
-    
+
+  
     
 }

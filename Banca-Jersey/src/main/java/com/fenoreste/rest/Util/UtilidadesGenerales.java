@@ -40,6 +40,21 @@ public class UtilidadesGenerales {
         }
         return origen.toUpperCase().replace(" ","").toUpperCase();
     }
+    
+    
+        public String obtenerOrigen(int idorigenp,EntityManager em) {
+        String origen = "";
+        try {
+            Query query = em.createNativeQuery("SELECT nombre FROM origenes WHERE idorigen="+idorigenp);
+            origen = String.valueOf(query.getSingleResult());            
+        } catch (Exception e) {
+            System.out.println("Error al buscar origen:" + e.getMessage());            
+            return origen;
+        }
+        return origen;
+    }
+
+        
 
     public Tablas busquedaTabla(EntityManager em,String idtabla, String idelemento) {
        Tablas tb = null;

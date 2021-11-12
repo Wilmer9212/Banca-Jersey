@@ -18,7 +18,6 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.sql.Timestamp;
 import java.util.Base64;
-import javax.json.Json;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.HeaderParam;
 import javax.ws.rs.POST;
@@ -271,7 +270,8 @@ public class TransactionResources {
         }
         return Response.status(Response.Status.OK).entity(response_json_principal).build();
     }
-
+     
+    
     @POST
     @Path("/Voucher")
     @Produces({MediaType.APPLICATION_JSON})
@@ -308,6 +308,21 @@ public class TransactionResources {
         }
         return Response.status(Response.Status.OK).entity(jsonMessage).build();
     }
+    
+    @POST
+    @Path("/ejecutaSpei")
+    @Produces({MediaType.APPLICATION_JSON})
+    @Consumes({MediaType.APPLICATION_JSON})
+    public Response ejecutarOrdenSPei(String cadena){
+        
+        JSONObject request_json = new JSONObject(cadena);
+        int idorden = request_json.getInt(cadena);
+        TransactionDAO dao = new TransactionDAO();
+        dao.ejecutaOrdenSPEI(idorden);        
+        return Response.ok().build();
+        
+    }
+    
 
     public static Timestamp stringTodate(String fecha) {
         Timestamp time = null;
@@ -317,5 +332,7 @@ public class TransactionResources {
         System.out.println("date:" + time);
         return time;
     }
+    
+    
 
 }

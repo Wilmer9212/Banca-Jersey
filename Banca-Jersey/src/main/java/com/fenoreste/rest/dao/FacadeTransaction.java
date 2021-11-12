@@ -22,6 +22,7 @@ import com.fenoreste.rest.entidades.AuxiliaresPK;
 import com.fenoreste.rest.entidades.Productos_bankingly;
 import com.fenoreste.rest.entidades.Procesa_pago_movimientos;
 import com.fenoreste.rest.entidades.Productos;
+import com.fenoreste.rest.entidades.ReferenciasP;
 import com.fenoreste.rest.entidades.Tablas;
 import com.fenoreste.rest.entidades.TablasPK;
 import com.fenoreste.rest.entidades.Transferencias;
@@ -151,11 +152,19 @@ public abstract class FacadeTransaction<T> {
                 //Valido el producto para retiro
                 //Busco el producto configurado para retiros
                 messageBackend = validarTransferenciaCSN(transactionOWN, identificadorTransferencia, SPEIOrden);
-                System.out.println("mensajeeeee spei:" + messageBackend);
-                backendResponse.setBackendMessage(messageBackend);
-                banderaCSN = true;
+                System.out.println("Message backend:"+messageBackend);
+                /*banderaCSN = true;
                 if (messageBackend.toUpperCase().contains("TDD")) {
                     banderaTDD = true;
+                }*/
+                
+                if(messageBackend.toUpperCase().contains("EXITO")){
+                    response = metodoEnviarSPEI(SPEIOrden);
+                    if(response.getId()>3){
+                        backendResponse.setBackendMessage("EXITO");
+                    }
+                }else{
+                    backendResponse.setBackendMessage(messageBackend);
                 }
             }
         }
@@ -252,12 +261,13 @@ public abstract class FacadeTransaction<T> {
                 OpaDTO opaD = null;
                 Auxiliares aDestino = null;
                 //Si es un spei lo identifico porque aqui va a una cuenta contable
+                Tablas tb_spei_cuenta_comisiones = null;
                 if (identificadorTransferencia == 5) {//tipo de orden SPEI
 
                     //Busco la cuenta spei en tablas solo capital
                     Tablas tb_spei_cuenta = util2.busquedaTabla(em, "bankingly_banca_movil", "cuenta_spei");
                     //Busco la cuenta spei en tablas solo para comisiones                    
-                    Tablas tb_spei_cuenta_comisiones = util2.busquedaTabla(em, "bankingly_banca_movil", "cuenta_spei_comisiones");
+                    tb_spei_cuenta_comisiones = util2.busquedaTabla(em, "bankingly_banca_movil", "cuenta_spei_comisiones");
                     //Tablas pra cuenta del iva de comisiones spei
                     //Busco la cuenta spei en tablas solo para comisiones                    
                     Tablas tb_spei_cuenta_comisiones_iva = util2.busquedaTabla(em, "bankingly_banca_movil", "cuenta_spei_comisiones_iva");
@@ -275,12 +285,15 @@ public abstract class FacadeTransaction<T> {
                     procesaOrigen.setIdgrupo(aOrigen.getIdgrupo());
                     procesaOrigen.setIdsocio(aOrigen.getIdsocio());
                     procesaOrigen.setCargoabono(0);
+                    
+                    procesaOrigen.setIdorden(response.getId());
 
                     procesaOrigen.setMonto(transaction.getAmount());
 
                     procesaOrigen.setIva(Double.parseDouble(aOrigen.getIva().toString()));
                     procesaOrigen.setTipo_amort(Integer.parseInt(String.valueOf(aOrigen.getTipoamortizacion())));
                     procesaOrigen.setSai_aux("");
+                    procesaOrigen.setIdorden(response.getId());
 
                     em.getTransaction().begin();
                     em.persist(procesaOrigen);
@@ -307,6 +320,8 @@ public abstract class FacadeTransaction<T> {
                     procesaDestino.setIva(0.0);
                     procesaDestino.setTipo_amort(0);
                     procesaDestino.setSai_aux("");
+                    procesaOrigen.setIdorden(response.getId());
+                    
                     em.getTransaction().begin();
                     em.persist(procesaDestino);
                     em.getTransaction().commit();
@@ -329,6 +344,8 @@ public abstract class FacadeTransaction<T> {
                     procesaDestino.setIva(0.0);
                     procesaDestino.setTipo_amort(0);
                     procesaDestino.setSai_aux("");
+                    procesaOrigen.setIdorden(response.getId());
+                    
                     em.getTransaction().begin();
                     em.persist(procesaDestino);
                     em.getTransaction().commit();
@@ -350,6 +367,10 @@ public abstract class FacadeTransaction<T> {
                     procesaDestino.setIva(0.0);
                     procesaDestino.setTipo_amort(0);
                     procesaDestino.setSai_aux("");
+                    procesaOrigen.setIdorden(response.getId());
+                    
+                    
+                    
                     em.getTransaction().begin();
                     em.persist(procesaDestino);
                     em.getTransaction().commit();
@@ -503,7 +524,7 @@ public abstract class FacadeTransaction<T> {
 
                                         if (aDestino.getTipoamortizacion() == 5) {
                                             //Entra si es hipotecario
-                                            String si_se_puede_aplicar = "select sai_bankinlgy_limite_adelanto (" + aDestino.getAuxiliaresPK().getIdorigenp() + ","
+                                            String si_se_puede_aplicar = "select sai_bankingly_limite_adelanto (" + aDestino.getAuxiliaresPK().getIdorigenp() + ","
                                                     + "" + aDestino.getAuxiliaresPK().getIdproducto() + ","
                                                     + "" + aDestino.getAuxiliaresPK().getIdauxiliar() + ","
                                                     + "(SELECT date(fechatrabajo) FROM origenes limit 1),"
@@ -531,8 +552,24 @@ public abstract class FacadeTransaction<T> {
 
                                             } else {
                                                 //Si no se aplico el movimiento pero como ya se habia retirado de la TDD entonce se lo devolvemos
+                                                //Si no se puede aplicar devolvemos el total que se puede abonar
+                                                String cuanto_permite_adelantar = "SELECT sai_bankingly_prestamo_cuanto("
+                                                        + aDestino.getAuxiliaresPK().getIdorigenp() + ","
+                                                        + aDestino.getAuxiliaresPK().getIdproducto() + ","
+                                                        + aDestino.getAuxiliaresPK().getIdauxiliar() + ","
+                                                        + "(SELECT date(fechatrabajo) FROM origenes limit 1),"
+                                                        + aDestino.getTipoamortizacion() + ","
+                                                        + "NULL)";
+                                                System.out.println("Permite adelantar:" + cuanto_permite_adelantar);
+                                                Query adelanto = em.createNativeQuery(cuanto_permite_adelantar);
+                                                String cuanto_adelantamo = adelanto.getSingleResult().toString();
+                                                System.out.println("sai_adelanto:" + cuanto_adelantamo);
+                                                String[] partes_cuanto = cuanto_adelantamo.split("\\|");
+                                                List list = Arrays.asList(partes_cuanto);
                                                 bandera_deposito_origen = new TarjetaDeDebito().depositoTDD(tarjeta_origen, procesaOrigen.getMonto());
-                                                backendResponse.setBackendMessage("MONTO ES MENOR A LO QUE SE PERMITE ADELANTAR,ESQUEMA HIPOTECARIO");
+                                                backendResponse.setBackendMessage("MONTO ES MENOR A LO QUE SE PERMITE ADELANTAR \n"
+                                                        + "ADELANTO PERMITIDO:" + list.get(0) + "\n"
+                                                        + "PRDUCTO ESQUEMA HIPOTECARIO");
                                             }
                                         } else {//Si es prestamo creciente
                                             //Datos a procesar
@@ -576,7 +613,6 @@ public abstract class FacadeTransaction<T> {
 
                         } else {//Solo para pruebas
                             if (identificadorTransferencia == 2) {//Si el destino es una TDD
-
                                 if (backendResponse.getBackendMessage().contains("TERCERO")) {
                                     System.out.println("ES tercero");
                                     //Busco el folio Destino
@@ -617,15 +653,52 @@ public abstract class FacadeTransaction<T> {
                                 }
 
                             } else {
-                                consulta_datos_procesar = "SELECT sai_bankingly_aplica_transaccion('" + fechaTr_.substring(0, 10) + "'," + procesaOrigen.getIdusuario() + ",'" + procesaOrigen.getSesion() + "','" + procesaOrigen.getReferencia() + "')";
+                                //Verifico que el producto destino sea un prestamo 
+                                if (prDestino.getTipoproducto() == 2) {
+                                    //Busco el tipo el tipo de amortizacion
 
-                                System.out.println("consulta app:" + consulta_datos_procesar);
-                                Query procesa_pago = em.createNativeQuery(consulta_datos_procesar);
-                                total_procesados = Integer.parseInt(String.valueOf(procesa_pago.getSingleResult()));
-                                if (total_procesados > 0) {
-                                    finish = true;
+                                    if (aDestino.getTipoamortizacion() == 5) {
+                                        //Datos a procesar
+                                        try {
+                                            consulta_datos_procesar = "SELECT sai_bankingly_aplica_transaccion('" + fechaTr_.substring(0, 10) + "'," + procesaOrigen.getIdusuario() + ",'" + procesaOrigen.getSesion() + "','" + procesaOrigen.getReferencia() + "')";
+                                            procesa_movimiento = em.createNativeQuery(consulta_datos_procesar);
+                                            total_procesados = Integer.parseInt(String.valueOf(procesa_movimiento.getSingleResult()));
+                                        } catch (Exception e) {
+                                            total_procesados = 0;
+                                        }
+
+                                        if (total_procesados > 0) {
+                                            finish = true;
+                                        } else {
+                                            //Si no se aplico el movimiento pero como ya se habia retirado de la TDD entonce se lo devolvemos
+                                            backendResponse.setBackendMessage("NO SE PUDO PROCESAR FUNCION EN SAICOOP");
+                                        }
+                                    } else {//Si es prestamo creciente
+                                        //Datos a procesar
+                                        consulta_datos_procesar = "SELECT sai_bankingly_aplica_transaccion('" + fechaTr_.substring(0, 10) + "'," + procesaOrigen.getIdusuario() + ",'" + procesaOrigen.getSesion() + "','" + procesaOrigen.getReferencia() + "')";
+                                        //Proceso
+                                        procesa_movimiento = em.createNativeQuery(consulta_datos_procesar);
+                                        //Obtengo el total de procesados
+                                        total_procesados = Integer.parseInt(String.valueOf(procesa_movimiento.getSingleResult()));
+                                        //Si la operacion se aplico de manera correcta lo dejamos asi es decir total de procesados mayor a 0
+                                        if (total_procesados > 0) {
+                                            finish = true;
+                                        } else {
+                                            //Si no se aplico el movimiento pero como ya se habia retirado de la TDD entonce se lo devolvemos
+                                            backendResponse.setBackendMessage("NO SE PUDO PROCESAR FUNCION EN SAICOOP");
+                                        }
+                                    }
+
                                 } else {
-                                    backendResponse.setBackendMessage("NO SE TERMINO LA TRANSACCION VERIFIQUE FUNCION");
+                                    consulta_datos_procesar = "SELECT sai_bankingly_aplica_transaccion('" + fechaTr_.substring(0, 10) + "'," + procesaOrigen.getIdusuario() + ",'" + procesaOrigen.getSesion() + "','" + procesaOrigen.getReferencia() + "')";
+                                    System.out.println("consulta app:" + consulta_datos_procesar);
+                                    Query procesa_pago = em.createNativeQuery(consulta_datos_procesar);
+                                    total_procesados = Integer.parseInt(String.valueOf(procesa_pago.getSingleResult()));
+                                    if (total_procesados > 0) {
+                                        finish = true;
+                                    } else {
+                                        backendResponse.setBackendMessage("NO SE TERMINO LA TRANSACCION VERIFIQUE FUNCION");
+                                    }
                                 }
                             }
                         }
@@ -655,7 +728,8 @@ public abstract class FacadeTransaction<T> {
 
                                 //Si la operacion se aplico de manera corracta lo dejamos asi
                                 if (total_procesados > 0) {
-                                    mensajeBackendResult = "TRANSACCION EXITOSA";
+                                    mensajeBackendResult = "TRANSACCION EXITOSA \n"
+                                            + "COMISION POR EL MOVIMIENTO :" + Double.parseDouble(tb_spei_cuenta_comisiones.getDato2()) * 0.16;
                                     clean = true;
                                 } else {//Si no se aplico el movimiento pero como ya se habia retirado de la TDD entonce se lo devolvemos
                                     backendResponse.setBackendMessage("NO SE APLICO EL MOVIMIENTO FALLA AL PROCESAR MOVIMIENTOS EN SAICOOP");
@@ -708,16 +782,34 @@ public abstract class FacadeTransaction<T> {
 
                             //Mensaje personalizado para CSN
                             if (banderaCSN) {
-                                mensajeBackendResult = "PAGO EXITOSO" + "\n"
-                                        + "SEGURO HIPOTECARIO    :" + ArrayDistribucion[0] + "\n "
-                                        + "COMISON COBRANZA      :" + ArrayDistribucion[1] + "\n "
-                                        + "INTERES MORATORIO     :" + ArrayDistribucion[2] + "\n "
+                                /*   mensajeBackendResult = "<tPAGO EXITOSO" + "\n"
+                                        + "<html><body><table border=1 cellspacing=1>" + "SEGURO HIPOTECARIO    :" + ArrayDistribucion[0]
+                                        + "<tr>COMISIÓN COBRANZA      :" + ArrayDistribucion[1] + "</tr>"
+                                        + "<tr>INTERES MORATORIO     :" + ArrayDistribucion[2] + "</tr>"
                                         + "IVA INTERES MORATORIO :" + ArrayDistribucion[3] + "\n"
                                         + "INTERES ORDINARIO     :" + ArrayDistribucion[4] + "\n"
                                         + "IVA INTERES ORDINARIO :" + ArrayDistribucion[5] + "\n"
                                         + "CAPITAL               :" + ArrayDistribucion[6] + "\n"
                                         + "ADELANTO DE INTERES   :" + ArrayDistribucion[7] + "\n \n \n \n"
-                                        + "EVITA ATRASOS, EN TU PRESTAMO EL PAGO DE INTERESES DEBE SER MENSUAL";//Para adelanto de interese solo aplicaria para los productos configurados
+                                        + "EVITA ATRASOS, EN TU PRESTAMO EL PAGO DE INTERESES DEBE SER MENSUAL" + "</table></body></html>";//Para adelanto de interese solo aplicaria para los productos configurados
+                                 */
+                                mensajeBackendResult = "<html>"
+                                        + "<body>"
+                                        + "<h1><center>PAGO EXITOSO</center></h1>"
+                                        + "<table border=1 align=center cellspacing=0>"
+                                        + "<tr><td>SEGURO HIPOTECARIO</td><td>" + ArrayDistribucion[0] + "</td></tr>"
+                                        + "<tr><td>COMISIÓN COBRANZA</td><td>" + ArrayDistribucion[1] + "</td></tr>"
+                                        + "<tr><td>INTERES MORATORIO</td><td>" + ArrayDistribucion[2] + "</td></tr>"
+                                        + "<tr><td>IVA INTERES MORATORIO </td><td>" + ArrayDistribucion[3] + " </td></tr>"
+                                        + "<tr><td>INTERES ORDINARIO     </td><td>" + ArrayDistribucion[4] + " </td></tr>"
+                                        + "<tr><td>IVA INTERES ORDINARIO </td><td>" + ArrayDistribucion[5] + " </td></tr>"
+                                        + "<tr><td>CAPITAL               </td><td>" + ArrayDistribucion[6] + " </td></tr>"
+                                        + "<tr><td>ADELANTO DE INTERES   </td><td>" + ArrayDistribucion[7] + " </td></tr></table>"
+                                        + "<center><p>EVITA ATRASOS, EN TU PRESTAMO EL PAGO DE INTERESES DEBE SER MENSUAL</p></center>"
+                                        + "</table>"
+                                        + "</body>"
+                                        + "</html>";
+
                             } else {
                                 mensajeBackendResult = "PAGO EXITOSO" + "\n"
                                         + "SEGURO HIPOTECARIO    :" + ArrayDistribucion[0] + "\n "
@@ -740,11 +832,11 @@ public abstract class FacadeTransaction<T> {
                 if (clean) {
                     //Aplico la  funcion para limpiar la tabla donde estaban los pagos cargo y abono
                     String consulta_termina_transaccion = "SELECT sai_bankingly_termina_transaccion('" + fechaTr_.substring(0, 10) + "'," + procesaOrigen.getIdusuario() + ",'" + procesaOrigen.getSesion() + "','" + procesaOrigen.getReferencia() + "')";
-                     Query termina_transaccion = em.createNativeQuery(consulta_termina_transaccion);
+                    Query termina_transaccion = em.createNativeQuery(consulta_termina_transaccion);
 
                     int registros_limpiados = Integer.parseInt(String.valueOf(termina_transaccion.getSingleResult()));
                     System.out.println("Registros Limpiados con exito:" + registros_limpiados);
-                    
+
                     String envio_ok_sms = "";
 
                     if (util2.obtenerOrigen(em).toUpperCase().replace(" ", "").contains("SANNICOLAS")) {
@@ -778,13 +870,9 @@ public abstract class FacadeTransaction<T> {
                                     System.out.println("entro a enviar sms abono tercero");
                                     //Enviamos datos a preparar el sms indicando que debe obtener datos de mensaje a cuenta propia
                                     //new PreparaSMS().enviaSMS_CSN(em, String.valueOf(transaction.getAmount()), 4, transaction.getDebitproductbankidentifier(), transaction.getCreditproductbankidentifier(), transaction.getClientbankidentifier());
+
                                     envio_ok_sms = envio_sms.enviaSMS_CSN(em, String.valueOf(transaction.getAmount()), 4, transaction.getDebitproductbankidentifier(), transaction.getCreditproductbankidentifier(), transaction.getClientbankidentifier());
-                                } else if (identificadorTransferencia == 5) {
-                                    System.out.println("entro a enviar sms SPEI salida");
-                                    //Enviamos datos a preparar el sms indicando que debe obtener datos de mensaje a cuenta propia
-                                    //new PreparaSMS().enviaSMS_CSN(em, String.valueOf(transaction.getAmount()), 5, transaction.getDebitproductbankidentifier(), transaction.getCreditproductbankidentifier(), transaction.getClientbankidentifier());
-                                    envio_ok_sms = envio_sms.enviaSMS_CSN(em, String.valueOf(transaction.getAmount()), 5, transaction.getDebitproductbankidentifier(), transaction.getCreditproductbankidentifier(), transaction.getClientbankidentifier());
-                                }
+                                } 
                             }
                         }
                     }
@@ -797,6 +885,7 @@ public abstract class FacadeTransaction<T> {
                     backendResponse.setIsError(false);
                     //Si fuera transferencia SPEI se devuelve el idTransaccion(Devuelvo el id de la orden SPEI)
                     if (identificadorTransferencia == 5) {
+                        //Guardo la orden
                         backendResponse.setTransactionIdenty(String.valueOf(response.getId()));
                     } else {
                         backendResponse.setTransactionIdenty(String.valueOf(transaction.getTransactionid()));
@@ -950,12 +1039,6 @@ public abstract class FacadeTransaction<T> {
                                             if (productoDestino.getTipoproducto() == 0) {
                                                 //Valido que realmente el el producto destino pertenezca al mismo socio 
                                                 if (ctaOrigen.getIdorigen() == ctaDestino.getIdorigen() && ctaOrigen.getIdgrupo() == ctaDestino.getIdgrupo() && ctaOrigen.getIdsocio() == ctaDestino.getIdsocio()) {
-                                                    //valido el minimo o maximo para banca movil
-                                                    /*  if (minMax(monto).toUpperCase().contains("VALIDO")) {
-                                                        //Valido el monto maximo por dia
-                                                        if (MaxPordia(opaOrigen, monto)) {
-                                                     */
- /*=======================REGLAS DE NEGOCIO==================================*/
                                                     //Valido que la cuenta origen para CSN esat un grupo de retiro configurado
                                                     if (util2.obtenerOrigen(em).contains("SANNICOL")) {
                                                         //Buscamos que el producto origen pertenezca al grupo de retiro
@@ -1131,12 +1214,7 @@ public abstract class FacadeTransaction<T> {
                                             if (ctaOrigen.getIdsocio() != ctaDestino.getIdsocio()) {
                                                 //Valido que el producto destino no sea un prestamo
                                                 if (productoDestino.getTipoproducto() == 0) {
-                                                    //valido el minimo o maximo para banca movil
-                                                    /*  if (minMax(monto).toUpperCase().contains("VALIDO")) {
-                                                        //Valido el monto maximo por dia
-                                                        if (MaxPordia(opaOrigen, monto)) {
-                                                     */
- /*=======================REGLAS DE NEGOCIO==================================*/
+
                                                     //Valido que la cuenta origen para CSN esat un grupo de retiro configurado
                                                     if (util2.obtenerOrigen(em).contains("SANNICOL")) {
                                                         if (ctaDestino.getAuxiliaresPK().getIdproducto() == Integer.parseInt(tablaProductoTDD.getDato1())) {
@@ -1241,7 +1319,7 @@ public abstract class FacadeTransaction<T> {
                                                                                 }
 
                                                                             } else {
-                                                                                message = "EL MONTO DIARIO PERMITIDO TRASPASA AL PERMITIDO";
+                                                                                message = "EL MONTO TRASPASA AL PERMITIDO DIARIO";
                                                                             }
 
                                                                         } else if (ctaDestino.getIdgrupo() == 25) {//Si es un juvenil
@@ -1264,7 +1342,25 @@ public abstract class FacadeTransaction<T> {
                                                                                 }
 
                                                                                 if (monto_udis_mensual <= Double.parseDouble(tb_juveniles_udis_mensual.getDato1())) {
-                                                                                    message = " VALIDADO CON EXITO";
+
+                                                                                    //Valido que si tiene el 180 no puede recibir depositos en el 125
+                                                                                    boolean Bandera_180 = false;
+                                                                                    try {
+                                                                                        String busqueda_180 = "SELECT * FROM auxiliares WHERE idorigen=" + ctaDestino.getIdorigen() + " AND idgrupo=" + ctaDestino.getIdgrupo() + " AND idsocio=" + ctaDestino.getIdsocio() + " AND idproducto=180";
+                                                                                        Query query_180 = em.createNativeQuery(busqueda_180, Auxiliares.class);
+                                                                                        Auxiliares a_180 = (Auxiliares) query_180.getSingleResult();
+                                                                                        if (a_180 != null) {
+                                                                                            Bandera_180 = true;
+                                                                                        }
+                                                                                    } catch (Exception e) {
+                                                                                        Bandera_180 = false;
+                                                                                    }
+
+                                                                                    if (!Bandera_180) {
+                                                                                        message = " VALIDADO CON EXITO";
+                                                                                    } else {
+                                                                                        message = "VERIFIQUE EL GRUPO DE SOCIO";
+                                                                                    }
                                                                                 } else {
                                                                                     message = "MONTO EN UDIS TRASPASA AL PERMITIDO POR MES";
                                                                                 }
@@ -1426,7 +1522,6 @@ public abstract class FacadeTransaction<T> {
                                     //Busco el producto destino
                                     productoDestino = em.find(Productos.class, opaD.getIdproducto());
                                     //Valido que la cuenta destino este activa
-                                    System.out.println("hasta aqui llego:" + productoDestino.getTipoproducto());
                                     if (ctaDestino.getEstatus() == 2) {
                                         //Valido que cuenta destino pertenezca al mismo socio
                                         if (identificadorTr == 3) {
@@ -1457,7 +1552,7 @@ public abstract class FacadeTransaction<T> {
                                                     //Valido el monto maximo por dia
                                                     if (MaxPordia(opaOrigen, monto)) {
                                                  */ if (monto <= Double.parseDouble(ctaDestino.getSaldo().toString())) {
-                                                    if (monto > 0) {
+                                                    if (ctaDestino.getSaldo().doubleValue() > 0) {
                                                         /*=======================REGLAS DE NEGOCIO==================================*/
                                                         //Valido que la cuenta origen para CSN esta un grupo de retiro configurado
                                                         if (util2.obtenerOrigen(em).toUpperCase().contains("SANNICOL")) {
@@ -1477,7 +1572,6 @@ public abstract class FacadeTransaction<T> {
                                                                 if (banderaGrupo) {
                                                                     //valido que el producto acepte depositos
                                                                     Tablas tbDeposito = util2.busquedaTabla(em, "bankingly_banca_movil", "productos_deposito");
-                                                                    System.out.println("Tabla encontrada y siguiendo:" + tbDeposito);
 
                                                                     String productos_deposito[] = tbDeposito.getDato2().split("\\|");
                                                                     List list_deposito = Arrays.asList(productos_deposito);
@@ -1487,13 +1581,6 @@ public abstract class FacadeTransaction<T> {
                                                                         }
                                                                     }
                                                                     if (banderaProductosDeposito) {
-                                                                        //Para CSN el producto de prestamos ya sea tercero o propio no debe estar en Moroso
-                                                                        /* String b_cartera = "SELECT cartera FROM carteravencida WHERE "
-                                                                                        + " idorigenp=" + ctaDestino.getAuxiliaresPK().getIdorigenp()
-                                                                                        + " AND idproducto=" + ctaDestino.getAuxiliaresPK().getIdproducto()
-                                                                                        + " AND idauxiliar=" + ctaDestino.getAuxiliaresPK().getIdauxiliar();
-
-                                                                                Query query_cartera = em.createNativeQuery(b_cartera);*/
 
                                                                         String fechaTrabajo = "SELECT date(fechatrabajo) FROM origenes limit 1";
                                                                         Query queryOrigenes = em.createNativeQuery(fechaTrabajo);
@@ -1511,7 +1598,38 @@ public abstract class FacadeTransaction<T> {
                                                                         // if (cartera.toUpperCase().equals("M") || cartera.toUpperCase().contains("V")) {
                                                                         //   message = "ESTATUS DE PRODUCTO:" + cartera;
                                                                         //} else {
-                                                                        message = message + " VALIDADO CON EXITO";
+                                                                        //Corro la funcion para verificar si es paralelo o no 
+                                                                        String prestamo_paralelo_str = "SELECT primero_debe_pagar_prestamo_paralelo(" + opaD.getIdorigenp() + "," + opaD.getIdproducto() + "," + opaD.getIdauxiliar() + ")";
+                                                                        String mensaje_paralelo = "";
+                                                                        try {
+                                                                            Query query_prestamo_paralelo = em.createNativeQuery(prestamo_paralelo_str);
+                                                                            mensaje_paralelo = String.valueOf(query_prestamo_paralelo.getSingleResult());
+
+                                                                        } catch (Exception e) {
+                                                                        }
+
+                                                                        if (!mensaje_paralelo.equals("")) {
+                                                                            //Entra si es hipotecario
+                                                                            if (ctaDestino.getTipoamortizacion() == 5) {
+                                                                                String si_se_puede_aplicar = "select sai_bankingly_limite_adelanto (" + ctaDestino.getAuxiliaresPK().getIdorigenp() + ","
+                                                                                        + "" + ctaDestino.getAuxiliaresPK().getIdproducto() + ","
+                                                                                        + "" + ctaDestino.getAuxiliaresPK().getIdauxiliar() + ","
+                                                                                        + "(SELECT date(fechatrabajo) FROM origenes limit 1),"
+                                                                                        + monto + ",NULL)";
+                                                                                Query query_se_puede_aplicar = em.createNativeQuery(si_se_puede_aplicar);
+                                                                                Double se_puede_pagar = Double.parseDouble(String.valueOf(query_se_puede_aplicar.getSingleResult()));
+
+                                                                                if (monto >= se_puede_pagar) {
+                                                                                    message = message + "VALIDADO CON EXITO";
+                                                                                } else {
+                                                                                    message = "PUEDES ADELANTAR :" + se_puede_pagar;
+                                                                                }
+                                                                            } else {
+                                                                                message = message + " VALIDADO CON EXITO";
+                                                                            }
+                                                                        } else {
+                                                                            message = mensaje_paralelo;
+                                                                        }
                                                                         // }
                                                                     } else {
                                                                         message = "PRODUCTO NO CONFIGURADO PARA RECIBIR DEPOSITOS";
@@ -1532,12 +1650,7 @@ public abstract class FacadeTransaction<T> {
                                                 } else {
                                                     message = "EL SALDO QUE INTENTA PAGAR SOBREPASA A LA DEUDA";
                                                 }
-                                                /* } else {
-                                                        message = "MONTO TRASPASA EL PERMITIDO DIARIO";
-                                                    }
-                                                } else {
-                                                    message = "EL SALDO QUE INTENTA TRANSFERIR ES " + minMax(monto).toUpperCase() + " AL PERMITIDO";
-                                                }*/
+
                                             } else {
                                                 message = "PRODUCTO DESTINO NO ES UN PRESTAMO";
                                             }
@@ -1738,7 +1851,7 @@ public abstract class FacadeTransaction<T> {
 
     //Se consume un servicio que yo desarrolle donde consumo API STP en caso de CSN si alguuien mas usara SPEI desarrollaria otro proyecto especficamente para la caja
     private ResponseSPEIDTO metodoEnviarSPEI(RequestDataOrdenPagoDTO orden) {
-        System.out.println("Entrando a metodo para enviar orden SPEIsssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss");
+        
         URL urlEndpoint = null;
         String output = "";
         String salida = "";
@@ -1807,6 +1920,58 @@ public abstract class FacadeTransaction<T> {
             em.close();
         }
         return response;
+    }
+
+    public void ejecutaOrdenSPEI(int idorden) {
+        EntityManager em = AbstractFacade.conexion();       
+        
+        try {
+            String consulta_lista_objetos = "SELECT fecha,idusuario,sesion,referencia,idorigenp,idproducto,idauxiliar,monto,idorigen,idgrupo,idsocio FROM bankingly_movimientos_ca WHERE idorden=" + idorden + " AND cargoabono=0";
+            Query query_lista_objetos = em.createNativeQuery(consulta_lista_objetos,Procesa_pago_movimientos.class);
+            Procesa_pago_movimientos pago = (Procesa_pago_movimientos) query_lista_objetos.getSingleResult();
+           
+            PreparaSMS envio_sms = new PreparaSMS();
+            try {
+                //entra SPEI
+                WsSiscoopFoliosTarjetas1 tarjeta_origen = new TarjetaDeDebito().buscaTarjetaTDD(pago.getIdorden(),pago.getIdgrupo(),pago.getIdsocio(), em);
+                //Retiramos de la TDD origen
+
+                boolean bandera_retiro = new TarjetaDeDebito().retiroTDD(tarjeta_origen, pago.getMonto());
+                //bandera_retiro=true;
+                //si el retiro se efectuo
+                if (bandera_retiro) {
+                    //Enviamos la orden SPEI 
+
+                    String consulta_datos_procesar = "SELECT sai_bankingly_aplica_transaccion('" + pago.getFecha().toString().substring(0, 10) + "'," +pago.getIdusuario()+ ",'" + pago.getSesion() + "','" + pago.getReferencia()+ "')";
+                    Query procesa_movimiento = em.createNativeQuery(consulta_datos_procesar);
+                    int total_procesados = Integer.parseInt(String.valueOf(procesa_movimiento.getSingleResult()));
+
+                    //Si la operacion se aplico de manera corracta lo dejamos asi
+                    String debitAccount = String.format("%06d",pago.getAuxiliaresPK().getIdorigenp())+""+String.format("%05d",pago.getAuxiliaresPK().getIdproducto())+String.format("%08d", pago.getAuxiliaresPK().getIdauxiliar());
+                    String cliente =  String.format("%06d", pago.getIdorigen())+""+String.format("%02d",pago.getIdgrupo())+String.format("%06d", pago.getIdsocio());
+                    if (total_procesados > 0) {
+                        //Aqui se envia el sms
+                        System.out.println("entro a enviar sms SPEI salida");
+                        //Enviamos datos a preparar el sms indicando que debe obtener datos de mensaje a cuenta propia
+                        
+                        String envio_ok_sms = envio_sms.enviaSMS_CSN(em, String.valueOf(pago.getMonto()), 5, debitAccount,"",cliente);
+      
+                    } else {//Si no se aplico el movimiento pero como ya se habia retirado de la TDD entonce se lo devolvemos
+                        boolean bandera_deposito_origen = new TarjetaDeDebito().depositoTDD(tarjeta_origen, pago.getMonto());
+                    }
+                } else {
+
+                }
+
+            } catch (Exception e) {
+                System.out.println("Error al procesar movimientos :" + e.getMessage());
+            }
+
+        } catch (Exception e) {
+            System.out.println("Error al procesar salida SPEI :" + e.getMessage());
+
+        }
+
     }
 
     //valida el monto para banca movil total de transferencia

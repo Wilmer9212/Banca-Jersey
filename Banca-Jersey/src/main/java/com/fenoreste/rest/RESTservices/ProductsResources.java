@@ -56,7 +56,6 @@ public class ProductsResources {
             }
         } catch (Exception e) {
             jsonError.put("Error", "Request Failed");
-
             return Response.status(Response.Status.BAD_REQUEST).entity(jsonError).build();
 
         }
@@ -129,7 +128,6 @@ public class ProductsResources {
         } catch (Exception e) {
             System.out.println("Error al convertir Json:" + e.getMessage());
         }
-        System.out.println("Lista de opas:" + productsBank);
         
         ProductsDAO dao = new ProductsDAO();
         
@@ -227,7 +225,6 @@ public class ProductsResources {
         scheduler.scheduleAtFixedRate(task, initialDelay, periodicDelay,TimeUnit.SECONDS);*/
         
         
-        System.out.println("cadena:" + cadena);
         JSONObject RequestData = new JSONObject(cadena);
         String fileId = "";
         

@@ -40,7 +40,6 @@ public class LoanResources {
             Error.put("ERROR", "VERIFIQUE SU HORARIO DE ACTIVIDAD FECHA,HORA O CONTACTE A SU PROVEEEDOR");
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(Error).build();
         }
-        System.out.println("pasoooooooooooooooooooooo");
         try {
             JSONObject jsonRecibido = new JSONObject(cadena);
             productBankIdentifier = jsonRecibido.getString("productBankIdentifier");
@@ -107,7 +106,6 @@ public class LoanResources {
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(Error).build();
         }
 
-        int count = 0;
         try {
             LoanFee loan = dao.LoanFee(productBankIdentifier, feeNumber);
             JsonObject j = new JsonObject();
@@ -158,12 +156,11 @@ public class LoanResources {
                 return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(Error).build();
             }
 
-            int count = 0;
             try {
                 List<LoanFee> loan = dao.LoanFees(productBankIdentifier, feesStatus, pageSize, pageStartIndex, order);
                 JsonObject j = new JsonObject();
 
-                int t = dao.contadorGeneral(productBankIdentifier, 1, feesStatus);
+                int t = dao.contadorGeneral(productBankIdentifier, 1, 0);
                 if (t > 0) {
                     j.put("Fees", loan);
                     j.put("LoanFeesCount", t);
@@ -219,15 +216,11 @@ public class LoanResources {
             List<LoanRate> loan = dao.LoanRates(productBankIdentifier, pageSize, pageStartIndex);
             System.out.println("Loan reta:"+loan);
             JsonObject j = new JsonObject();
-            
             j.put("Rates", loan);
             j.put("LoanRatesCount", loan.size());
             return Response.status(Response.Status.OK).entity(j).build();
         } catch (Exception e) {
-            Error.put("Error", "SOCIOS NO ENCONTRADOS");
-            System.out.println("Error al convertir cadena a JSON:" + e.getMessage());
             return Response.status(Response.Status.NO_CONTENT).entity(Error).build();
-
         }
     }
 
@@ -269,7 +262,7 @@ public class LoanResources {
             JsonObject j = new JsonObject();
             int t = dao.contadorGeneral(productBankIdentifier, 2, 0);
             j.put("Payments", ListPayment);
-            j.put("LoanPaymentsCount", t);
+            j.put("LoanPaymentsCount", dao.contador_registros(productBankIdentifier));
             return Response.status(Response.Status.OK).entity(j).build();
         } catch (Exception e) {
             Error.put("Error", "SOCIOS NO ENCONTRADOS");

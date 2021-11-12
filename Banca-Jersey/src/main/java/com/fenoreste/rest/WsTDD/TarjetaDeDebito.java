@@ -91,12 +91,12 @@ public class TarjetaDeDebito {
         try {
             System.out.println("Estatus de la tarjeta de debito:" + tarjeta.getActiva());
             if (tarjeta.getActiva()) {
-
-                /*response.setAvailableAmount(20000);                     
+                
+                response.setAvailableAmount(20000);                     
                 response.setCode(1);
                 response.setDescription("activa");
-                */
-               response = conexionSiscoop().getSiscoop().getBalanceQuery(tarjeta.getIdtarjeta());
+                
+             //response = conexionSiscoop().getSiscoop().getBalanceQuery(tarjeta.getIdtarjeta());
 
             } else {
                 response.setDescription("La tarjeta esta inactiva: " + tarjeta.getIdtarjeta());

@@ -24,7 +24,7 @@ public class AccountLast5MovementsDTO {
     private String TypeDescription;
     private String CheckId;
     private String VoucherId;
-
+     
     public AccountLast5MovementsDTO() {
     }
 

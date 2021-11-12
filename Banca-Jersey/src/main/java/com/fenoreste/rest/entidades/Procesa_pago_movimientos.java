@@ -47,25 +47,10 @@ public class Procesa_pago_movimientos implements Serializable {
     private Integer tipo_amort;   
     @Column(name = "sai_aux")
     private String sai_aux;
+    @Column(name = "idorden")
+    private Integer idorden;
 
     public Procesa_pago_movimientos() {
-    }
-
-    public Procesa_pago_movimientos(AuxiliaresPK auxiliaresPK, Timestamp fecha, Integer idusuario, String sesion, String referencia, Integer idorigen, Integer idgrupo, Integer idsocio, Integer cargoabono, Double monto, String idcuenta, Double iva, Integer tipo_amort, String sai_aux) {
-        this.auxiliaresPK = auxiliaresPK;
-        this.fecha = fecha;
-        this.idusuario = idusuario;
-        this.sesion = sesion;
-        this.referencia = referencia;
-        this.idorigen = idorigen;
-        this.idgrupo = idgrupo;
-        this.idsocio = idsocio;
-        this.cargoabono = cargoabono;
-        this.monto = monto;
-        this.idcuenta = idcuenta;
-        this.iva = iva;
-        this.tipo_amort = tipo_amort;
-        this.sai_aux = sai_aux;
     }
 
     public AuxiliaresPK getAuxiliaresPK() {
@@ -180,6 +165,15 @@ public class Procesa_pago_movimientos implements Serializable {
         this.sai_aux = sai_aux;
     }
 
+    public Integer getIdorden() {
+        return idorden;
+    }
+
+    public void setIdorden(Integer idorden) {
+        this.idorden = idorden;
+    }
+    
+    
     @Override
     public String toString() {
         return "Procesa_pago_movimientos{" + "auxiliaresPK=" + auxiliaresPK + ", fecha=" + fecha + ", idusuario=" + idusuario + ", sesion=" + sesion + ", referencia=" + referencia + ", idorigen=" + idorigen + ", idgrupo=" + idgrupo + ", idsocio=" + idsocio + ", cargoabono=" + cargoabono + ", monto=" + monto + ", idcuenta=" + idcuenta + ", iva=" + iva + ", tipo_amort=" + tipo_amort + ", sai_aux=" + sai_aux + '}';

@@ -49,10 +49,8 @@ import java.util.List;
 
 import javax.persistence.EntityManager;
 import javax.persistence.Query;
-import javax.xml.namespace.QName;
 import org.eclipse.persistence.config.CacheUsage;
 import org.eclipse.persistence.config.QueryHints;
-import wssyctdd.SiscoopTDD;
 
 public abstract class FacadeProductos<T> {
 
@@ -76,7 +74,6 @@ public abstract class FacadeProductos<T> {
             } else if (!clientBankIdentifiers.equals("") && productTypes == null) {
                 consulta = "SELECT * FROM auxiliares a INNER JOIN tipos_cuenta_bankingly USING(idproducto) WHERE replace((to_char(a.idorigen,'099999')||to_char(a.idgrupo,'09')||to_char(a.idsocio,'099999')),' ','')='" + clientBankIdentifiers + "' AND a.estatus=2";
             }
-            System.out.println("Consulta:" + consulta);
             Query query = em.createNativeQuery(consulta, Auxiliares.class);
             List<Auxiliares> ListaA = query.setHint(QueryHints.CACHE_USAGE,CacheUsage.DoNotCheckCache).getResultList();
 
@@ -87,11 +84,12 @@ public abstract class FacadeProductos<T> {
                 try {
                     ccb = em.find(Productos_bankingly.class, a.getAuxiliaresPK().getIdproducto());
                     productTypeId = String.valueOf(ccb.getProductTypeId());
-                    descripcion = ccb.getDescripcion();
+                   
                 } catch (Exception e) {
                     productTypeId = "";
-                    descripcion = "";
                 }
+                
+                Productos pr = em.find(Productos.class,a.getAuxiliaresPK().getIdproducto());
 
                 String og = String.format("%06d", a.getIdorigen()) + String.format("%02d", a.getIdgrupo());
                 String s = String.format("%06d", a.getIdsocio());
@@ -118,6 +116,15 @@ public abstract class FacadeProductos<T> {
                    }
                 }
                 
+                auxi = new ProductsDTO();
+                auxi.setClientBankIdentifier(og+s);
+                auxi.setProductBankIdentifier(op+aa);
+                auxi.setProductNumber(String.valueOf(a.getAuxiliaresPK().getIdproducto()));
+                auxi.setProductStatusId(sttt);
+                auxi.setProductTypeId(productTypeId);
+                auxi.setProductAlias(pr.getNombre());
+                auxi.setCanTransact(canTransact);
+                auxi.setCurrencyId("1");/*
                 auxi = new ProductsDTO(
                         og + s,
                         op + aa,
@@ -126,7 +133,8 @@ public abstract class FacadeProductos<T> {
                         productTypeId,
                         descripcion,
                         canTransact,//Solo lo que se puede hacer en el producto
-                        "1");
+                        "1");*/
+      
                 
                 ListagetP.add(auxi);
                 productTypeId = "";
@@ -209,8 +217,6 @@ public abstract class FacadeProductos<T> {
                             
                             Query query_inversiones_sai = em.createNativeQuery(sai_inversion_find);
                             String sai_inversion = (String) query_inversiones_sai.getSingleResult();
-                            
-                            System.out.println("Ssai:"+sai_inversion_find);
                             String[] partes_sai_inversiones = sai_inversion.split("\\|");
                             List lista_posciones_sai_inversiones = Arrays.asList(partes_sai_inversiones);
                             String[]partes_fecha_vencimiento=lista_posciones_sai_inversiones.get(2).toString().split("/");
@@ -259,12 +265,12 @@ public abstract class FacadeProductos<T> {
                     Origenes origen = em.find(Origenes.class, a.getAuxiliaresPK().getIdorigenp());
                     PersonasPK pk = new PersonasPK(a.getIdorigen(), a.getIdgrupo(), a.getIdsocio());
                     Persona p = em.find(Persona.class, pk);
-
+                    Productos pr=em.find(Productos.class, opa.getIdproducto());
                     ProductsConsolidatePositionDTO dto = new ProductsConsolidatePositionDTO();
                     dto.setClientBankIdentifier(clientBankIdentifier);
                     dto.setProductBankIdentifier(productsBank.get(ii));
                     dto.setProductTypeId(String.valueOf(tipo_cuenta_bankingly.getProductTypeId()));
-                    dto.setProductAlias(tipo_cuenta_bankingly.getDescripcion());
+                    dto.setProductAlias(pr.getNombre());
                     dto.setProductNumber(String.valueOf(a.getAuxiliaresPK().getIdproducto()));
                     dto.setLocalCurrencyId(1);
                     dto.setLocalBalance(saldo);
@@ -296,6 +302,7 @@ public abstract class FacadeProductos<T> {
 
     }
 
+    
     public List<ProductBankStatementDTO> statements(String cliente, String productBankIdentifier, int productType) {
         EntityManager em = AbstractFacade.conexion();
         List<ProductBankStatementDTO> listaEstadosDeCuenta = new ArrayList<>();
@@ -333,6 +340,7 @@ public abstract class FacadeProductos<T> {
 
                 int total_estados = Integer.parseInt(String.valueOf(tbEstados_Cuenta.getDato1()));
                 for (int i = 0; i < total_estados; i++) {
+                    System.out.println("siiiiiiiiiiiiiiiii:"+i);
                     ProductBankStatementDTO estadoCuenta = new ProductBankStatementDTO();
                     ff = String.valueOf(localDate.plusMonths(-i));
                     fi = String.valueOf(localDate.plusMonths(-i - 1));
@@ -341,7 +349,7 @@ public abstract class FacadeProductos<T> {
                     System.out.println("yyyy/MM/dd HH:mm:ss-> " + dtf.format(LocalDateTime.now()));
 
                     //Busco si hay movimientos si no mejor no llamos a estados de cuenta porque va a tronar
-                    String busqueda_mov = "SELECT case when count(*)>0 then 2 else 0 end FROM auxiliares_d WHERE idorigenp=" + opa.getIdorigenp() + " AND idproducto=" + opa.getIdproducto() + " AND idauxiliar=" + opa.getIdauxiliar()
+                    String busqueda_mov = "SELECT case when count(*)>0 then 1 else 0 end FROM auxiliares_d WHERE idorigenp=" + opa.getIdorigenp() + " AND idproducto=" + opa.getIdproducto() + " AND idauxiliar=" + opa.getIdauxiliar()
                             + " AND date(fecha) between '" + fi.substring(0, 10) + "' AND '" + ff.substring(0, 10) + "'";
 
                     System.out.println("Busqueda_mov:" + busqueda_mov);
@@ -354,10 +362,8 @@ public abstract class FacadeProductos<T> {
 
                     }
 
-                    System.out.println("aun saliooooooooooo");
                     if (count_mov > 0) {
                         file = crear_llenar_txt(productBankIdentifier, fi, ff, productType);
-
                         //file=new File(ruta()+"e_cuenta_ahorro_0101010011000010667_2.txt");          
                         File fileTxt = new File(ruta() + file.getName());
                         if (fileTxt.exists()) {
