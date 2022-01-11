@@ -5,12 +5,15 @@
  */
 package com.fenoreste.rest.dao;
 
+import com.fenorest.rest.EnviarSMS.PreparaSMS;
+import com.fenoreste.rest.DTO.OgsDTO;
 import com.fenoreste.rest.Util.UtilidadesGenerales;
 import com.fenoreste.rest.ResponseDTO.BackendOperationResultDTO;
 import com.fenoreste.rest.ResponseDTO.Bank;
 import com.fenoreste.rest.ResponseDTO.ThirdPartyProductDTO;
 import com.fenoreste.rest.ResponseDTO.userDocumentIdDTO;
 import com.fenoreste.rest.Util.AbstractFacade;
+import com.fenoreste.rest.Util.Utilidades;
 import com.fenoreste.rest.entidades.Auxiliares;
 import com.fenoreste.rest.entidades.AuxiliaresPK;
 import com.fenoreste.rest.entidades.Colonias;
@@ -21,8 +24,10 @@ import com.fenoreste.rest.entidades.Paises;
 import com.fenoreste.rest.entidades.Persona;
 import com.fenoreste.rest.entidades.PersonasPK;
 import com.fenoreste.rest.entidades.Productos;
+import com.fenoreste.rest.entidades.ProductosTercero;
 import com.fenoreste.rest.entidades.ProductosTerceros;
 import com.fenoreste.rest.entidades.Productos_bankingly;
+import com.fenoreste.rest.entidades.Tablas;
 import java.util.ArrayList;
 import javax.persistence.EntityManager;
 import javax.persistence.Query;
@@ -34,6 +39,8 @@ import javax.persistence.Query;
 public abstract class FacadeTerceros<T> {
 
     UtilidadesGenerales util2 = new UtilidadesGenerales();
+    Utilidades util = new Utilidades();
+   
 
     public FacadeTerceros(Class<T> entityClass) {
     }
@@ -147,7 +154,6 @@ public abstract class FacadeTerceros<T> {
         ThirdPartyProductDTO dto = new ThirdPartyProductDTO();
         try {
             Auxiliares a = validarTercero(productNumber, productTypeId);
-            System.out.println("A:" + a);
             if (a != null) {
                 if (a.getEstatus() == 2) {
                     userDocumentIdDTO userDocument = new userDocumentIdDTO();
@@ -178,7 +184,21 @@ public abstract class FacadeTerceros<T> {
                     Estados e = em.find(Estados.class, m.getIdestado());
                     Paises pa = em.find(Paises.class, e.getIdpais());
                     dto.setOwnerCountryId("484");//Moneda nacional interncional cambia de codigo a 840
-                    dto.setOwnerEmail(p.getEmail());
+                    
+                    String email = "";
+                    //Buscamos en la tabla infomracion de terceros para obtener el email
+                    try {
+                        //Para evitar cualquier error usamos el ciclo por si el tercero no esta en la lista es nuevo 
+                         ProductosTercero tercero = em.find(ProductosTercero.class,productNumber);
+                         email = tercero.getBeneficiaryemail();
+                    } catch (Exception ex) {
+                        System.out.println("Error al buscar el tercero en el archivo bakingly:"+ex.getMessage());
+                    }
+                    if(!email.equals("")){
+                      dto.setOwnerEmail(email);//p.getEmail()); 
+                    }else{
+                        dto.setOwnerEmail(p.getEmail());
+                    }
                     dto.setOwnerCity(c.getNombre());
                     dto.setOwnerAddress(c.getNombre() + "," + p.getNumeroext() + "," + p.getNumeroint());
                     //Creamos y llenamos documento para el titular del producto de tercero
@@ -245,6 +265,40 @@ public abstract class FacadeTerceros<T> {
         }
         return null;
 
+    }
+    
+    public BackendOperationResultDTO tokenSend(String clientBankIdentifier,String numero,String token){
+        BackendOperationResultDTO dto = new BackendOperationResultDTO();
+        dto.setIsError(true);
+        dto.setBackendMessage("Error");
+        dto.setBackendReference(null);
+        dto.setBackendCode("2");
+        dto.setIntegrationProperties("");
+        dto.setTransactionIdenty(null);
+        
+        try {
+            EntityManager em = AbstractFacade.conexion();
+            //Busco a la persona para comparar que los numeros sea el mismo
+            OgsDTO ogs = util.ogs(clientBankIdentifier);
+            PersonasPK personaPK = new PersonasPK(ogs.getIdorigen(),ogs.getIdgrupo(),ogs.getIdsocio());
+            Persona p = em.find(Persona.class, personaPK);
+            if(p.getCelular().trim().equals(numero.trim())){               
+                Tablas tb_activo_sms = util2.busquedaTabla(em,"bankingly_banca_movil","smsactivo");
+                if(tb_activo_sms.getDato1().trim().equals("1")){
+                  PreparaSMS sendSms = new PreparaSMS();
+                  String respuesta_envio_token = sendSms.enviarTokenAltaTerceros(em,numero, token);  
+                  dto.setIsError(false);
+                  dto.setBackendMessage("Token enviado");
+                  dto.setBackendCode("1");                  
+                }
+            }else{
+                dto.setBackendMessage("El numero no coincide con nuestros registros");
+            }
+            
+        } catch (Exception e) {
+            System.out.println("Error al enviar sms token : "+e.getMessage());
+        }
+        return dto;
     }
 
     public boolean actividad_horario() {

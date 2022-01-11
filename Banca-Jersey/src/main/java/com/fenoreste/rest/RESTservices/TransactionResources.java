@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.sql.Timestamp;
+import java.text.Normalizer;
 import java.util.Base64;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.HeaderParam;
@@ -61,8 +62,6 @@ public class TransactionResources {
         }*/
 
         JSONObject jsonRecibido = new JSONObject(cadena.replace("null", "nulo"));
-
-
         /*================================================================
                 Obtenemos el request y lo pasamos a DTO
         =================================================================*/
@@ -75,11 +74,6 @@ public class TransactionResources {
             JSONObject insertTransaction = jsonRecibido.getJSONObject("inserTransactionInput");
             JSONObject destinationDocumentId = insertTransaction.getJSONObject("destinationDocumentId");
 
-            /*destinationDocumentIdDTO dto1 = new destinationDocumentIdDTO();
-            dto1.setIntegrationProperties("{}");
-            dto1.setDocumentNumber(Integer.parseInt(destinationDocumentId.getString("documentNumber")));
-            dto1.setDocumentType(Integer.parseInt(destinationDocumentId.getString("documentType")));
-             */
             DocumentIdTransaccionesDTO dto1 = new DocumentIdTransaccionesDTO();
             dto1.setDocumentNumber(destinationDocumentId.getString("documentNumber"));
             dto1.setDocumentType(destinationDocumentId.getString("documentType"));
@@ -87,17 +81,7 @@ public class TransactionResources {
             DocumentIdTransaccionesDTO dto2 = new DocumentIdTransaccionesDTO();
             dto1.setDocumentNumber(destinationDocumentId.getString("documentNumber"));
             dto1.setDocumentType(destinationDocumentId.getString("documentType"));
-            /*
-            sourceDocumentIdDTO dto2 = new sourceDocumentIdDTO();
-            dto2.setDocumentNumber(Integer.parseInt(sourceDocumentId.getString("documentNumber")));
-            dto2.setDocumentType(Integer.parseInt(sourceDocumentId.getString("documentType")));
-            dto2.setIntegrationProperties("{}");*/
 
- /*userDocumentIdDTO dto3 = new userDocumentIdDTO();
-            dto3.setDocumentNumber(Integer.parseInt(userDocumentId.getString("documentNumber")));
-            dto3.setDocumentType(Integer.parseInt(userDocumentId.getString("documentType")));
-            dto3.setIntegrationProperties("{}");
-             */
             DocumentIdTransaccionesDTO dto3 = new DocumentIdTransaccionesDTO();
             dto1.setDocumentNumber(destinationDocumentId.getString("documentNumber"));
             dto1.setDocumentType(destinationDocumentId.getString("documentType"));
@@ -160,7 +144,7 @@ public class TransactionResources {
             JsonObject obje = new JsonObject();
             obje.put("ERROR", "VERIFIQUE SU HORARIO DE ACTIVIDAD FECHA,HORA O CONTACTE A SU PROVEEEDOR");
             backendOperationResult.setBackendMessage("VERIFIQUE SU HORARIO DE ACTIVIDAD FECHA,HORA O CONTACTE A SU PROVEEEDOR");
-             response_json_3.put("integrationProperties",null);
+            response_json_3.put("integrationProperties", null);
             response_json_3.put("backendCode", backendOperationResult.getBackendCode());
             response_json_3.put("backendMessage", backendOperationResult.getBackendMessage());
             response_json_3.put("backendReference", null);
@@ -169,21 +153,11 @@ public class TransactionResources {
 
             response_json_secundario.put("backendOperationResult", response_json_3);
             response_json_principal.put("InsertTransactionResult", response_json_secundario);
-            
+
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(response_json_principal).build();
         }
         try {
             System.out.println("Accediendo a trasnferencias con subTransactionType=" + dto.getSubTransactionTypeId() + ",TransactionId:" + dto.getTransactionTypeId());
-            //metodosTransferencias.comprobar(dto.getCreditProductBankIdentifier(),dto.getAmount(), dto.getClientBankIdentifier());
-            //validamos el estatus de la cuenta origen(Usuario Activo,Cuenta Activa,Saldo>MontoTransaferencia y que el opa realmente pertenece al socio,que producto no sea un prestamo)
-            //String mensajeOrigen=metodosTransferencias.comprobarCuentaOrigen(dto.getDebitProductBankIdentifier(),dto.getAmount(), dto.getClientBankIdentifier());
-            //System.out.println("mensajeOrigen:"+mensajeOrigen); 
-            //String mensajeDestino=metodosTransferencias.comprobarCuentaDestino(dto.getCreditProductBankIdentifier(),dto.getClientBankIdentifier());
-            /*if("".toUpperCase().contains("EXITO")){
-                System.out.println("Validado con exito.");
-                //Si la cuenta origen a sido validada
-                //validamos la cuenta destino como es una transferencia entre mis cuentas valida(cuenta al mismo ogs que el destino,que este activa y que no sea un prestamo)
-             */
 
             //Si subtransactionType es 1 y transactionType es 1: El tipo de transaccion es es entre mis cuentas
             if (dto.getSubTransactionTypeId() == 1 && dto.getTransactionTypeId() == 1) {
@@ -203,6 +177,22 @@ public class TransactionResources {
             }
             //Si es una trasnferencia SPEI
             if (dto.getSubTransactionTypeId() == 3 && dto.getTransactionTypeId() == 1) {
+
+                if (!dao.actividad_horario_spei()) {
+                    backendOperationResult.setBackendMessage("VERIFIQUE SU HORARIO DE ACTIVIDAD FECHA,HORA O CONTACTE A SU PROVEEEDOR");
+                    response_json_3.put("integrationProperties", null);
+                    response_json_3.put("backendCode", backendOperationResult.getBackendCode());
+                    response_json_3.put("backendMessage", backendOperationResult.getBackendMessage());
+                    response_json_3.put("backendReference", null);
+                    response_json_3.put("isError", backendOperationResult.isIsError());
+                    response_json_3.put("transactionType", backendOperationResult.getTransactionIdenty());
+
+                    response_json_secundario.put("backendOperationResult", response_json_3);
+                    response_json_principal.put("InsertTransactionResult", response_json_secundario);
+                    return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(response_json_principal).build();
+                }
+                
+                
                 //Consumimos mis servicios de SPEI que tengo en otro proyecto(CSN0)
                 RequestDataOrdenPagoDTO ordenReque = new RequestDataOrdenPagoDTO();
                 ordenReque.setClienteClabe(dto.getDebitProductBankIdentifier());//Opa origen como cuenta clabe en el metodo spei se busca la clave
@@ -216,18 +206,9 @@ public class TransactionResources {
 
                 backendOperationResult = dao.transferencias(dto, 5, ordenReque);
 
-                /*
-                requestSPEI.setBanco(dto.getDestinationBank());//Banco destino
-                requestSPEI.setBeneficiario(dto.getDestinationName());//Nombre del beneficiario
-                requestSPEI.setCliente(dto.getClientBankIdentifier());//Socio que enviar la orden
-                requestSPEI.setConceptoPago(dto.getDescription());//Concepto Pago
-                requestSPEI.setCuentaBeneficiario(dto.getCreditProductBankIdentifier());//Clabe del detinatario
-                requestSPEI.setMonto(dto.getAmount());
-                requestSPEI.setRfcCurpBeneficiario(dto.getSourceName());
-                requestSPEI.setRfcCurpBeneficiario(dto.getDestinationDocumentId().getDocumentNumber());*/
             }
 
-            response_json_3.put("integrationProperties",null);
+            response_json_3.put("integrationProperties", null);
             response_json_3.put("backendCode", backendOperationResult.getBackendCode());
             response_json_3.put("backendMessage", backendOperationResult.getBackendMessage());
             response_json_3.put("backendReference", null);
@@ -236,23 +217,6 @@ public class TransactionResources {
 
             response_json_secundario.put("backendOperationResult", response_json_3);
             response_json_principal.put("InsertTransactionResult", response_json_secundario);
-            /*
-            response_json_principal.put("InsertTransactionResult", dao)
-            build = Json.createObjectBuilder().add("InsertTransactionResult", Json.createObjectBuilder()
-                    .add("backendOperationResult", Json.createObjectBuilder()
-                            .add("integrationProperties", Json.createObjectBuilder().build())
-                            .add("backendCode", backendOperationResult.getBackendCode())
-                            .add("backendMessage", backendOperationResult.getBackendMessage())
-                            .add("backendReference", "null")
-                            .add("isError", backendOperationResult.isIsError())
-                            .add("transactionIdenty", backendOperationResult.getTransactionIdenty())).build())
-                    .build();
-             */
- /* if (backendOperationResult.getBackendCode().equals("1")) {
-                return Response.status(Response.Status.OK).entity(build).build();
-            } else {
-                return Response.status(Response.Status.BAD_GATEWAY).entity(build).build();
-            }*/
 
         } catch (Exception e) {
             backendOperationResult.setBackendMessage(e.getMessage());
@@ -265,13 +229,12 @@ public class TransactionResources {
 
             response_json_secundario.put("backendOperationResult", response_json_3);
             response_json_principal.put("InsertTransactionResult", response_json_secundario);
-            
+
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(response_json_principal).build();
         }
         return Response.status(Response.Status.OK).entity(response_json_principal).build();
     }
-     
-    
+
     @POST
     @Path("/Voucher")
     @Produces({MediaType.APPLICATION_JSON})
@@ -308,21 +271,32 @@ public class TransactionResources {
         }
         return Response.status(Response.Status.OK).entity(jsonMessage).build();
     }
-    
+
     @POST
     @Path("/ejecutaSpei")
     @Produces({MediaType.APPLICATION_JSON})
     @Consumes({MediaType.APPLICATION_JSON})
-    public Response ejecutarOrdenSPei(String cadena){
-        
+    public Response ejecutarOrdenSPei(String cadena) {
         JSONObject request_json = new JSONObject(cadena);
-        int idorden = request_json.getInt(cadena);
+        int idorden = request_json.getInt("id");
+        String folio = request_json.getString("folioOrigen");
+        String estado = request_json.getString("estado");
+        String causa = request_json.getString("causaDevolucion");
+        System.out.println("Cadena :" + cadena);
         TransactionDAO dao = new TransactionDAO();
-        dao.ejecutaOrdenSPEI(idorden);        
-        return Response.ok().build();
-        
+        if (!dao.actividad_horario_spei()) {
+            JsonObject obje = new JsonObject();
+            obje.put("mensaje", "VERIFIQUE SU HORARIO DE ACTIVIDAD FECHA,HORA O CONTACTE A SU PROVEEEDOR");
+            return Response.ok(obje).build();
+        }
+
+        String mensaje = dao.ejecutaOrdenSPEI(idorden, folio, estado, causa);
+        System.out.println("mensaje:" + mensaje);
+        JsonObject response = new JsonObject();
+        response.put("mensaje", mensaje);
+        return Response.ok(response).build();
+
     }
-    
 
     public static Timestamp stringTodate(String fecha) {
         Timestamp time = null;
@@ -332,7 +306,21 @@ public class TransactionResources {
         System.out.println("date:" + time);
         return time;
     }
+
     
-    
+      public static String limpiarAcentos(String cadena) {
+        String limpio = null;
+        if (cadena != null) {
+            String valor = cadena;
+            valor = valor.toUpperCase();
+            // Normalizar texto para eliminar acentos, dieresis, cedillas y tildes
+            limpio = Normalizer.normalize(valor, Normalizer.Form.NFD);
+            // Quitar caracteres no ASCII excepto la enie, interrogacion que abre, exclamacion que abre, grados, U con dieresis.
+            limpio = limpio.replaceAll("[^\\p{ASCII}(ñ\u0303)(n\u0303)(\u00A1)(\u00BF)(\u00B0)(U\u0308)(u\u0308)]", "");
+            // Regresar a la forma compuesta, para poder comparar la enie con la tabla de valores
+            limpio = Normalizer.normalize(limpio, Normalizer.Form.NFC);
+        }
+        return limpio.toLowerCase();
+    }
 
 }

@@ -5,10 +5,14 @@
  */
 package com.fenoreste.rest.RESTservices;
 
+import com.fenoreste.rest.DTO.OgsDTO;
+import com.fenoreste.rest.DTO.OpaDTO;
 import com.fenoreste.rest.ResponseDTO.BackendOperationResultDTO;
 import com.fenoreste.rest.ResponseDTO.Bank;
 import com.fenoreste.rest.ResponseDTO.ThirdPartyProductDTO;
 import com.fenoreste.rest.ResponseDTO.userDocumentIdDTO;
+import com.fenoreste.rest.Util.Utilidades;
+import com.fenoreste.rest.Util.UtilidadesGenerales;
 import com.fenoreste.rest.dao.TercerosDAO;
 import com.github.cliftonlabs.json_simple.JsonObject;
 import java.util.ArrayList;
@@ -27,6 +31,9 @@ import org.json.JSONObject;
  */
 @Path("/Third")
 public class TercerosResources {
+
+    UtilidadesGenerales util = new UtilidadesGenerales();
+    Utilidades util2 = new Utilidades();
 
     @Path("/Party/Product/Validate")
     @POST
@@ -70,7 +77,7 @@ public class TercerosResources {
             productType_ = request.getInt("productType");
             ownerName_ = request.getString("ownerName");
             ownerCountryId_ = request.getString("ownerCountryId");
-            ownerEmail_ = request.getString("ownerEmail");
+            //ownerEmail_ = request.getString("ownerEmail");
             ownerCity_ = request.getString("ownerCity");
             ownerAddress_ = request.getString("ownerAddress");
             ownerPhoneNumber_ = request.getString("ownerPhoneNumber");
@@ -111,7 +118,7 @@ public class TercerosResources {
             dtoTercero.setTransactionSubType(transactionSubType_);
             dtoTercero.setOwnerName(ownerName_);
             dtoTercero.setOwnerCountryId(ownerCountryId_);
-            dtoTercero.setOwnerEmail(ownerEmail_);
+            dtoTercero.setOwnerEmail("NA");
             dtoTercero.setOwnerCity(ownerCity_);
             dtoTercero.setOwnerCity(ownerCity_);
             dtoTercero.setOwnerAddress(ownerAddress_);
@@ -127,20 +134,26 @@ public class TercerosResources {
         }
         com.github.cliftonlabs.json_simple.JsonObject jsonR = new JsonObject();
         TercerosDAO dao = new TercerosDAO();
-        if(!dao.actividad_horario()){
-            jsonR.put("ERROR","VERIFIQUE SU HORARIO DE ACTIVIDAD FECHA,HORA O CONTACTE A SU PROVEEEDOR");
-           return Response.status(Response.Status.BAD_REQUEST).entity(jsonR).build();
+        if (!dao.actividad_horario()) {
+            jsonR.put("ERROR", "VERIFIQUE SU HORARIO DE ACTIVIDAD FECHA,HORA O CONTACTE A SU PROVEEEDOR");
+            return Response.status(Response.Status.BAD_REQUEST).entity(jsonR).build();
         }
+
+        OpaDTO opa = util2.opa(dtoTercero.getThirdPartyProductBankIdentifier());
+        if (util.validacionSopar(opa.getIdorigenp(), opa.getIdproducto(), opa.getIdauxiliar(), 2)) {
+            jsonR.put("ERROR", "SOCIO BLOQUEADO");
+            return Response.status(Response.Status.BAD_REQUEST).entity(jsonR).build();
+        }
+
         try {
-            System.out.println("si");
             BackendOperationResultDTO response = dao.validarProductoTerceros(dtoTercero);
             JsonObject jsonResponse = new JsonObject();
             jsonResponse.put("BackendOperationResult", response);
             return Response.status(Response.Status.OK).entity(jsonResponse).build();
         } catch (Exception e) {
-           return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(e.getMessage()).build();
-           
-        } 
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(e.getMessage()).build();
+
+        }
     }
 
     @Path("/Party/Account/ProductOwnerAndCurrency")
@@ -153,7 +166,7 @@ public class TercerosResources {
         Integer productTypeId_ = 0;
         Integer thirdPartyProductType_ = 0;
         //validamos que nuestro request este bien formado
-        try {            
+        try {
             productNumber_ = jsonRequest.getString("productNumber");
             productTypeId_ = jsonRequest.getInt("productTypeId");
             //Otengo el objeto de productOwnerDocumentId
@@ -164,15 +177,22 @@ public class TercerosResources {
         } catch (Exception e) {
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(e.getMessage()).build();
         }
-        
+
         TercerosDAO dao = new TercerosDAO();
-        
-        if(!dao.actividad_horario()){
-            JsonObject error=new JsonObject();
-            error.put("ERROR","VERIFIQUE SU HORARIO DE ACTIVIDAD FECHA,HORA O CONTACTE A SU PROVEEEDOR");
+
+        JsonObject error = new JsonObject();
+        if (!dao.actividad_horario()) {
+            error.put("ERROR", "VERIFIQUE SU HORARIO DE ACTIVIDAD FECHA,HORA O CONTACTE A SU PROVEEEDOR");
             return Response.status(Response.Status.BAD_REQUEST).entity(error).build();
         }
-        userDocumentIdDTO documento=new userDocumentIdDTO();
+
+        OpaDTO opa = util2.opa(productNumber_);
+        if (util.validacionSopar(opa.getIdorigenp(), opa.getIdproducto(), opa.getIdauxiliar(), 2)) {
+            error.put("ERROR", "SOCIO BLOQUEADO");
+            return Response.status(Response.Status.BAD_REQUEST).entity(error).build();
+        }
+
+        userDocumentIdDTO documento = new userDocumentIdDTO();
         try {
             ThirdPartyProductDTO dto = dao.cosultaProductosTerceros(productNumber_, productTypeId_, documento, thirdPartyProductType_);
             JsonObject third = new JsonObject();
@@ -180,8 +200,8 @@ public class TercerosResources {
             return Response.status(Response.Status.OK).entity(third).build();
         } catch (Exception e) {
             System.out.println("Error:" + e.getMessage());
-           
-        } 
+
+        }
         return null;
     }
 

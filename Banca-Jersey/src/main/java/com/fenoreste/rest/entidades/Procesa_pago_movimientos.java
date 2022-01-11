@@ -47,8 +47,10 @@ public class Procesa_pago_movimientos implements Serializable {
     private Integer tipo_amort;   
     @Column(name = "sai_aux")
     private String sai_aux;
-    @Column(name = "idorden")
+    @Column(name = "idorden_spei")
     private Integer idorden;
+    @Column(name ="spei_cancelado")
+    private boolean spei_aceptado;
 
     public Procesa_pago_movimientos() {
     }
@@ -172,14 +174,17 @@ public class Procesa_pago_movimientos implements Serializable {
     public void setIdorden(Integer idorden) {
         this.idorden = idorden;
     }
-    
-    
-    @Override
-    public String toString() {
-        return "Procesa_pago_movimientos{" + "auxiliaresPK=" + auxiliaresPK + ", fecha=" + fecha + ", idusuario=" + idusuario + ", sesion=" + sesion + ", referencia=" + referencia + ", idorigen=" + idorigen + ", idgrupo=" + idgrupo + ", idsocio=" + idsocio + ", cargoabono=" + cargoabono + ", monto=" + monto + ", idcuenta=" + idcuenta + ", iva=" + iva + ", tipo_amort=" + tipo_amort + ", sai_aux=" + sai_aux + '}';
+
+    public boolean isSpei_aceptado() {
+        return spei_aceptado;
     }
 
-    
+    public void setSpei_aceptado(boolean spei_aceptado) {
+        this.spei_aceptado = spei_aceptado;
+    }
+
+   
+   
     private static final long serialVersionUID = 1L;
 
     

@@ -9,7 +9,7 @@ import com.fenoreste.rest.Util.AbstractFacade;
 import com.fenoreste.rest.dao.CustomerDAO;
 import com.fenoreste.rest.entidades.Auxiliares;
 import com.fenoreste.rest.entidades.Persona;
-import com.fenoreste.rest.entidades.banca_movil_usuarios;
+import com.fenoreste.rest.entidades.Banca_movil_usuarios;
 import com.github.cliftonlabs.json_simple.JsonObject;
 import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
@@ -44,8 +44,8 @@ public class TestResources {
             EntityManager em=AbstractFacade.conexion();
             String usuario=request.getString("username");
             String c="SELECT * FROM usuarios_bancam_bankinglyTest WHERE username='"+usuario+"' and estatus=true";
-            Query q=em.createNativeQuery(c,banca_movil_usuarios.class);
-            banca_movil_usuarios user=(banca_movil_usuarios) q.getSingleResult();
+            Query q=em.createNativeQuery(c,Banca_movil_usuarios.class);
+            Banca_movil_usuarios user=(Banca_movil_usuarios) q.getSingleResult();
             /*jsonOb.put("user",user.getUsername());
             jsonOb.put("id",user.getSocio());*/
             em.close();

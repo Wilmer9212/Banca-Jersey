@@ -12,27 +12,28 @@ import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import javax.persistence.EntityManager;
-import javax.persistence.EntityManagerFactory;
 
 /**
  *
  * @author wilmer
  */
-public class TimerBeepClock implements Runnable {
-
+public class TimerBeepClock implements Runnable {   
+    
+    
     public void run() {
         Toolkit.getDefaultToolkit().beep();
         SimpleDateFormat dateFormatLocal = new SimpleDateFormat("HH:mm:ss a");
         String hora = dateFormatLocal.format(new Date());
         //eliminamos todos los PDF a las 4:00AM
-        if (hora.replace(" ", "").equals("04:00:00AM")) {
-            eliminarPorExtension(ruta(), "pdf");
-            eliminarPorExtension(ruta(), "html");
-            eliminarPorExtension(ruta(), "txt");
-        }        
-        if (hora.replace(" ", "").equals("13:29:00PM")) {
+        if (hora.replace(" ", "").equals("01:00:00AM")) {
+            eliminarPorExtension(ruta(),"pdf");
+            eliminarPorExtension(ruta(),"html");
+            eliminarPorExtension(ruta(),"txt");
+        }  
+        /*
+        if (hora.replace(" ", "").equals("13:29:00")) {
             actualizarFechaServidorBD();
-        }
+        }*/
     }
 
     //Metodo para eliminar todos los pdf 
@@ -74,13 +75,4 @@ public class TimerBeepClock implements Runnable {
         return actualRuta;
     }
 
-    /*public static void main(String[] args) {
-        ScheduledExecutorService scheduler
-                = Executors.newSingleThreadScheduledExecutor();
-
-        Runnable task = new TimerBeepClock();
-        int initialDelay = 1;
-        int periodicDelay = 1;
-        scheduler.scheduleAtFixedRate(task, initialDelay, periodicDelay,TimeUnit.SECONDS);
-    }*/
 }

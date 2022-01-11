@@ -7,35 +7,38 @@ package com.fenoreste.rest.entidades;
 
 import java.io.Serializable;
 import javax.persistence.Column;
+import javax.persistence.EmbeddedId;
 import javax.persistence.Entity;
-import javax.persistence.Id;
 import javax.persistence.Table;
 
 /**
  *
- * @author wilmer
+ * @author Elliot
  */
 @Entity
 @Table(name = "banca_movil_usuarios_bankingly")
-public class Usuarios_Banca_Movil implements Serializable {
+public class Banca_movil_usuarios implements Serializable {
 
-    @Id
-    private PersonasPK personasPK;
-    @Column(name = "alias_usuario")
+    private static final long serialVersionUID = 1L;
+    
+    @EmbeddedId
+    protected PersonasPK personasPK;    
+    @Column(name="alias_usuario")
     private String alias_usuario;
-    @Column(name = "idorigenp")
-    private Integer idorigenp;
+    @Column(name="idorigenp")
+    private int idorigenp;
     @Column(name = "idproducto")
-    private Integer idproducto;
-    @Column(name = "idauxiliar")
-    private Integer idauxiliar;
-    @Column(name = "estatus")
+    private int idproducto;
+    @Column(name="idauxiliar")
+    private int idauxiliar;
+    @Column(name="estatus")
     private boolean estatus;
 
-    public Usuarios_Banca_Movil() {
+    public Banca_movil_usuarios() {
+    
     }
 
-    public Usuarios_Banca_Movil(PersonasPK personasPK, String alias_usuario, Integer idorigenp, Integer idproducto, Integer idauxiliar, boolean estatus) {
+    public Banca_movil_usuarios(PersonasPK personasPK, String alias_usuario, int idorigenp, int idproducto, int idauxiliar, boolean estatus) {
         this.personasPK = personasPK;
         this.alias_usuario = alias_usuario;
         this.idorigenp = idorigenp;
@@ -60,27 +63,27 @@ public class Usuarios_Banca_Movil implements Serializable {
         this.alias_usuario = alias_usuario;
     }
 
-    public Integer getIdorigenp() {
+    public int getIdorigenp() {
         return idorigenp;
     }
 
-    public void setIdorigenp(Integer idorigenp) {
+    public void setIdorigenp(int idorigenp) {
         this.idorigenp = idorigenp;
     }
 
-    public Integer getIdproducto() {
+    public int getIdproducto() {
         return idproducto;
     }
 
-    public void setIdproducto(Integer idproducto) {
+    public void setIdproducto(int idproducto) {
         this.idproducto = idproducto;
     }
 
-    public Integer getIdauxiliar() {
+    public int getIdauxiliar() {
         return idauxiliar;
     }
 
-    public void setIdauxiliar(Integer idauxiliar) {
+    public void setIdauxiliar(int idauxiliar) {
         this.idauxiliar = idauxiliar;
     }
 
@@ -94,7 +97,9 @@ public class Usuarios_Banca_Movil implements Serializable {
 
     @Override
     public String toString() {
-        return "Usuarios_Banca_Movil{" + "personasPK=" + personasPK + ", alias_usuario=" + alias_usuario + ", idorigenp=" + idorigenp + ", idproducto=" + idproducto + ", idauxiliar=" + idauxiliar + ", estatus=" + estatus + '}';
+        return "usuarios_banca_bankingly{" + "personasPK=" + personasPK + ", alias_usuario=" + alias_usuario + ", idorigenp=" + idorigenp + ", idproducto=" + idproducto + ", idauxiliar=" + idauxiliar + ", estatus=" + estatus + '}';
     }
+
+   
 
 }

@@ -4,7 +4,6 @@ import com.fenoreste.rest.Util.UtilidadesGenerales;
 import com.fenoreste.rest.DTO.OpaDTO;
 import com.fenoreste.rest.ResponseDTO.FeesDueData;
 import com.fenoreste.rest.Util.AbstractFacade;
-import com.fenoreste.rest.ResponseDTO.AccountDetailsDTO;
 import com.fenoreste.rest.ResponseDTO.LoanDTO;
 import com.fenoreste.rest.ResponseDTO.LoanFee;
 import com.fenoreste.rest.ResponseDTO.LoanPayment;
@@ -43,8 +42,6 @@ public abstract class FacadeLoan<T> {
     public LoanDTO Loan(String productBankIdentifier) {
         EntityManager em = AbstractFacade.conexion();
         OpaDTO opa = util.opa(productBankIdentifier);
-        AccountDetailsDTO cuenta = null;
-        System.out.println("O:" + opa.getIdorigenp() + ",P:" + opa.getIdproducto() + ",A:" + opa.getIdauxiliar());
         LoanDTO dto = null;
         try {
             AuxiliaresPK auxpk = new AuxiliaresPK(opa.getIdorigenp(), opa.getIdproducto(), opa.getIdauxiliar());
@@ -54,38 +51,39 @@ public abstract class FacadeLoan<T> {
                 Double currentBalance = Double.parseDouble(aux.getSaldo().toString());
                 Double currentRate = Double.parseDouble(aux.getTasaio().toString());// + Double.parseDouble(aux.getTasaim().toString()) + Double.parseDouble(aux.getTasaiod().toString());
                 int loanStatusId = sts.getProductstatusid();
-
-                Query query = em.createNativeQuery("SELECT count(*) FROM amortizaciones WHERE idorigenp=" + opa.getIdorigenp()
+                String buscar_amortizaciones_pagadas = "SELECT count(*) FROM amortizaciones WHERE idorigenp=" + opa.getIdorigenp()
                         + " AND idproducto=" + opa.getIdproducto()
                         + " AND idauxiliar=" + opa.getIdauxiliar()
-                        + " AND todopag=true");
-                int amPag = Integer.parseInt(String.valueOf(query.getSingleResult()));
+                        + " AND todopag=true";
+                Query query = em.createNativeQuery(buscar_amortizaciones_pagadas);
+                int amortizaciones_pagadas = Integer.parseInt(String.valueOf(query.getSingleResult()));
 
                 Query query1 = em.createNativeQuery("SELECT count(*) FROM amortizaciones WHERE idorigenp=" + opa.getIdorigenp()
                         + " AND idproducto=" + opa.getIdproducto()
                         + " AND idauxiliar=" + opa.getIdauxiliar());
                 int tam = Integer.parseInt(String.valueOf(query1.getSingleResult()));
-                System.out.println("Amortizaciones Pagadas:" + amPag);
-                dto = new LoanDTO(
-                        productBankIdentifier,
-                        currentBalance,//Saldo o balance actual del prestamo
-                        currentRate,//Tasa de interes aplicada al prestamo
-                        RSFeesDue(opa.getIdorigenp(), opa.getIdproducto(), opa.getIdauxiliar()),//Cantidad de cuotas vencidas
-                        RSFeesDueData(opa.getIdorigenp(), opa.getIdproducto(), opa.getIdauxiliar(), aux.getTipoamortizacion()),//Campo FeesDueData   Informacion sobre el vencimiento de las cuotas
-                        loanStatusId, //Estatus del prestamo
-                        nextFee(opa.getIdorigenp(), opa.getIdproducto(), opa.getIdauxiliar()), //Informacion sobre la proxima cuota
-                        Double.parseDouble(aux.getMontoprestado().toString()),
-                        RSOverdueDays(opa.getIdorigenp(), opa.getIdproducto(), opa.getIdauxiliar()),
-                        amPag,
-                        0.0,
-                        0.0,
-                        productBankIdentifier,
-                        tam,
-                        true,
-                        null,
-                        null,
-                        null);
-                System.out.println("LoanPre:" + dto);
+
+                dto = new LoanDTO();
+                dto.setAccountBankIdentifier(productBankIdentifier);
+                dto.setCurrentBalance(currentBalance);//Saldo del prestamo
+                dto.setCurrentRate(currentRate);//Tasa del prestamo
+                dto.setFeesDue(RSFeesDue(opa.getIdorigenp(), opa.getIdproducto(), opa.getIdauxiliar()));//Abonos vencidos
+                dto.setFeesDueData(RSFeesDueData(opa.getIdorigenp(), opa.getIdproducto(), opa.getIdauxiliar(), aux.getTipoamortizacion()));//Vencimiento de cuotas
+                dto.setLoanStatusId(loanStatusId);
+                dto.setNextFee(nextFee(opa.getIdorigenp(), opa.getIdproducto(), opa.getIdauxiliar()));
+                dto.setOriginalAmount(aux.getMontoprestado().doubleValue());
+                dto.setOverdueDays(RSOverdueDays(opa.getIdorigenp(), opa.getIdproducto(), opa.getIdauxiliar()));//dias vencidos
+                dto.setPaidFees(amortizaciones_pagadas);
+                dto.setPayoffBalance(0.0);
+                dto.setPrepaymentAmount(0.0);
+                dto.setProductBankIdentifier(productBankIdentifier);
+                dto.setTerm(tam);//Cantidad de amortizaciones para el prestamo
+                dto.setShowPrincipalInformation(true);//para mostrar ajustes
+                dto.setLoanFeesResult(null);//LoanFees(productBankIdentifier,1,0,10,""));
+                dto.setLoanRateResult(null);
+                dto.setLoanPaymentsResult(null);
+                
+
             }
         } catch (Exception e) {
             System.out.println("Error en GetAccountDetails:" + e.getMessage());
@@ -167,26 +165,28 @@ public abstract class FacadeLoan<T> {
         try {
             String complemento = "";
             if (feesStatus == 0 && order.equalsIgnoreCase("feenumber")) {
-                complemento = "ORDER BY (idorigenp+idproducto+idauxiliar+idamortizacion) ASC";
+                complemento = "ORDER BY idamortizacion ASC";
             } else if (feesStatus == 1 && order.equalsIgnoreCase("feenumber")) {
-                complemento = "AND todopag=true ORDER BY (idorigenp+idproducto+idauxiliar+idamortizacion) ASC";
+                complemento = " AND todopag=true ORDER BY idamortizacion ASC";
             } else if (feesStatus == 1 && order.equals("")) {
-                complemento = "AND todopag=true";
+                System.out.println("Buscando por estatus :" + feesStatus + " y ordernado por:" + order);
+                complemento = " AND todopag=false";
             } else if (feesStatus == 2 && order.equalsIgnoreCase("feenumber")) {
-                complemento = "AND todopag=false ORDER BY (idorigenp+idproducto+idauxiliar+idamortizacion) ASC";
-
+                complemento = " AND todopag=false ORDER BY idamortizacion ASC";
             } else if (feesStatus == 2 && order.equals("")) {
-                complemento = "AND todopag=false";
+                complemento = " AND todopag=false";
             }
 
             AuxiliaresPK aux_pk = new AuxiliaresPK(opa.getIdorigenp(), opa.getIdproducto(), opa.getIdauxiliar());
             Auxiliares a = em.find(Auxiliares.class, aux_pk);
-            String con = "SELECT * FROM amortizaciones WHERE idorigenp=" + opa.getIdorigenp() + " AND idproducto=" + opa.getIdproducto() + " AND idauxiliar=" + opa.getIdauxiliar() + complemento;
+            String con = "SELECT * FROM amortizaciones WHERE idorigenp=" + opa.getIdorigenp() + " AND idproducto=" + opa.getIdproducto() + " AND idauxiliar=" + opa.getIdauxiliar() + "" + complemento;
+            System.out.println("Consulta para obtener cuotas :" + con);
             Query query = em.createNativeQuery(con, Amortizaciones.class);
             query.setFirstResult(pageStartIndex);
             query.setMaxResults(pageSize);
             List<Amortizaciones> lista_amortizaciones = query.getResultList();
             String converted = "";
+            System.out.println("Tamaño de la lista encontrada:" + lista_amortizaciones.size());
             for (int i = 0; i < lista_amortizaciones.size(); i++) {
                 LoanFee loan_fee = new LoanFee();
                 Amortizaciones amortizacion = lista_amortizaciones.get(i);
@@ -196,20 +196,19 @@ public abstract class FacadeLoan<T> {
                 } else {
                     fee_status = 1;
                 }
-
                 converted = String.valueOf(convertToLocalDateTimeViaInstant(amortizacion.getVence()) + ":00.000Z");
                 loan_fee.setCapitalBalance(a.getSaldo().doubleValue());
-                loan_fee.setFeeNumber(amortizacion.getAmortizacionesPK().getIdorigenp());
+                loan_fee.setFeeNumber(amortizacion.getAmortizacionesPK().getIdamortizacion());
                 loan_fee.setPrincipalAmount(amortizacion.getAbono().doubleValue());
                 loan_fee.setDueDate(converted);
                 loan_fee.setInterestAmount(amortizacion.getIo().doubleValue());
                 loan_fee.setFeeStatusId(fee_status);
                 loan_fee.setOthersAmount(0.0);
-                loan_fee.setTotalAmount(amortizacion.getAbono().doubleValue() + amortizacion.getIo().doubleValue());
+                loan_fee.setTotalAmount(amortizacion.getAbono().doubleValue());
 
                 lista_cuotas.add(loan_fee);
             }
-            System.out.println("lista de amortizaciones:" + lista_cuotas);
+            System.out.println("Total de cuotas encontradas : " + lista_cuotas.size());
 
         } catch (Exception e) {
             System.out.println("Error al buscar tabla de amortizaciones en metodo loan Fee result:" + e.getMessage());
@@ -217,107 +216,6 @@ public abstract class FacadeLoan<T> {
             em.close();
         }
         return lista_cuotas;
-
-        /*
-        
-        EntityManager em = AbstractFacade.conexion();
-        LoanFee loanFee = null;
-        OpaDTO opa = util.opa(productBankIdentifier);
-        List<Amortizaciones> ListaAmortizaciones = new ArrayList<>();
-        List<LoanFee> listaFees = new ArrayList<>();
-        try {
-            System.out.println("dento de try");
-
-            AuxiliaresPK pk = new AuxiliaresPK(opa.getIdorigenp(), opa.getIdproducto(), opa.getIdauxiliar());
-            Auxiliares aux = em.find(Auxiliares.class, pk);
-            System.out.println("todavia:");
-            //Obtengo informacion con el sai_auxiliar hasta la fecha actual, si hay dudas checar el catalogo o atributos que devuelve la funcion
-            String sai_auxiliar = "SELECT * FROM sai_auxiliar(" + opa.getIdorigenp() + "," + opa.getIdproducto() + "," + opa.getIdauxiliar() + ",(SELECT date(fechatrabajo) FROM origenes limit 1))";
-            System.out.println("SaiIII:" + sai_auxiliar);
-            Query RsSai = em.createNativeQuery(sai_auxiliar);
-            String sai = RsSai.getSingleResult().toString();
-            System.out.println("sai:" + sai);
-            String[] parts = sai.split("\\|");
-            List lists = Arrays.asList(parts);
-            String complemento = "";
-
-            if (feesStatus == 0 && order.equalsIgnoreCase("feenumber")) {
-                complemento = "ORDER BY (idorigenp+idproducto+idauxiliar+idamortizacion) ASC";
-            } else if (feesStatus == 1 && order.equalsIgnoreCase("feenumber")) {
-                complemento = "AND todopag=true ORDER BY (idorigenp+idproducto+idauxiliar+idamortizacion) ASC";
-            } else if (feesStatus == 1 && order.equals("")) {
-                complemento = "AND todopag=true";
-            } else if (feesStatus == 2 && order.equalsIgnoreCase("feenumber")) {
-                complemento = "AND todopag=false ORDER BY (idorigenp+idproducto+idauxiliar+idamortizacion) ASC";
-
-            } else if (feesStatus == 2 && order.equals("")) {
-                complemento = "AND todopag=false";
-            }
-            System.out.println("complemento:" + complemento);
-            //Obtengo la amortizacion que se vence
-            String consultaA = "SELECT * FROM amortizaciones WHERE idorigenp=" + opa.getIdorigenp()
-                    + " AND idproducto=" + opa.getIdproducto()
-                    + " AND idauxiliar=" + opa.getIdauxiliar() + " " + complemento;
-            System.out.println("La consulta es:" + consultaA);
-            int inicioB = 0;
-           
-            ///==========
-            if (pageStartIndex == 1 || pageStartIndex == 0) {
-                inicioB = 0;
-            } else if (pageStartIndex > 1) {
-                inicioB = ((pageStartIndex -1) * pageSize);
-                               
-            }
-            
-            //========================
-            inicioB = ((pageStartIndex * pageSize) - pageSize);
-            if (inicioB < 0) {
-                inicioB = 0;
-            }
-            Query queryA = em.createNativeQuery(consultaA, Amortizaciones.class);
-            queryA.setFirstResult(pageStartIndex);
-            queryA.setMaxResults(pageSize);
-            ListaAmortizaciones = queryA.getResultList();
-            Double iovencido = Double.parseDouble(list.get(6).toString()) + Double.parseDouble(list.get(17).toString());
-            Double imvencido = Double.parseDouble(list.get(15).toString()) + Double.parseDouble(list.get(18).toString());
-
-            for (int x = 0; x < ListaAmortizaciones.size(); x++) {
-                Amortizaciones amm = ListaAmortizaciones.get(x);
-                int loanfeests = 0;
-                if (Double.parseDouble(amm.getAbono().toString()) == Double.parseDouble(amm.getAbonopag().toString())) {
-                    loanfeests = 3;
-                } else if (Double.parseDouble(amm.getAbono().toString()) > Double.parseDouble(amm.getAbonopag().toString())
-                        && amm.getTodopag() == false) {
-                    loanfeests = 1;
-                } else if (!list.get(14).toString().equals("C")) {
-                    loanfeests = 2;
-                }
-                Loan_Fee_Status loanf = em.find(Loan_Fee_Status.class, loanfeests);
-                LocalDateTime now = LocalDateTime.now();
-                Double abonoT = Double.parseDouble(amm.getAbono().toString()) + iovencido + imvencido;
-                Date d = amm.getVence();
-                String converted = String.valueOf(convertToLocalDateTimeViaInstant(amm.getVence()) + ":00.000Z");
-                loanFee = new LoanFee(
-                        Double.parseDouble(aux.getSaldo().toString()),//Saldo o balance del prestamo principal
-                        amm.getAmortizacionesPK().getIdorigenp() + amm.getAmortizacionesPK().getIdproducto() + amm.getAmortizacionesPK().getIdauxiliar() + amm.getAmortizacionesPK().getIdamortizacion(),
-                        Double.parseDouble(amm.getAbono().toString()),
-                        converted,//String.valueOf(now+"Z"),//amm.getVence().toString(),
-                        iovencido,
-                        imvencido,
-                        loanf.getId(),
-                        Double.parseDouble(amm.getAbono().toString()),
-                        abonoT);
-                listaFees.add(loanFee);
-            }
-
-        } catch (Exception e) {
-            System.out.println("Error en LoanFee 1:" + e.getMessage());
-        } finally {
-            em.close();
-        }
-        System.out.println("ListaFees:" + listaFees);
-        return listaFees;
-         */
     }
 
     public List<LoanRate> LoanRates(String productBankIdentifier, int pageSize, int pageStartIndex) {
@@ -328,69 +226,10 @@ public abstract class FacadeLoan<T> {
         try {
             AuxiliaresPK aux_pk = new AuxiliaresPK(opa.getIdorigenp(), opa.getIdproducto(), opa.getIdauxiliar());
             Auxiliares a = em.find(Auxiliares.class, aux_pk);
-            /*String consulta = "SELECT fechaactivacion,tasaio FROM auxiliares WHERE"
-                    + " idorigenp=" + opa.getIdorigenp() + " AND"
-                    + " idproducto=" + opa.getIdproducto() + " AND"
-                    + " idauxiliar=" + opa.getIdauxiliar();
-            System.out.println("Consulta:" + consulta);
-             */
- /* Query queryA = em.createNativeQuery(consulta);
-            List<Object[]> MiLista = queryA.getResultList();
-            
-            //limpio tablas
-               String vaciar_tabla_tasas="DELETE FROM loanrates";    
-               em.getTransaction().begin();
-               em.createNativeQuery(vaciar_tabla_tasas).executeUpdate();  
-               em.getTransaction().commit();
-            
-            LocalDateTime now = LocalDateTime.now();
-            
-            //corro mi lista de tasas
-            for (Object[] lista : MiLista) {
-
-                for (int x = 0; x < lista.length; x++) {
-                    if (x > 0) {
-                        try {
-                            System.out.println("Listax:" + lista[x]);
-                            double xc = Double.parseDouble(lista[x].toString());
-
-                            LoanRates lor = new LoanRates();
-                            em.getTransaction().begin();
-                            lor.setId(numero());
-                            lor.setOpa(opa.getIdorigenp() + "-" + opa.getIdproducto() + "-" + opa.getIdauxiliar());
-                            lor.setInitialdate(lista[0].toString());
-                            lor.setRate(xc);
-                            em.persist(lor);
-                            em.getTransaction().commit();
-                        } catch (Exception e) {
-                            System.out.println("Error:" + e.getMessage());
-                        }
-                    }
-                }
-            }
-
-            try {
-                //Recupero tasas para el opa
-                String c = "SELECT * FROM loanrates WHERE opa='" + opa.getIdorigenp() + "-" + opa.getIdproducto() + "-" + opa.getIdauxiliar() + "'";
-                Query queryLoan = em.createNativeQuery(c, LoanRates.class);
-                queryLoan.setFirstResult(pageStartIndex);
-                queryLoan.setMaxResults(pageSize);
-               
-                
-                System.out.println("Total de la lista:" + listaRates.size());
-                for (int j = 0; j < listaRatess.size(); j++) {
-             */
-            //List<LoanRates> listaRatess =  new LoanRates(); // queryLoan.getResultList();
 
             String converted = "";//String.valueOf(convertToLocalDateTimeViaInstant(amm.getVence())+":00.000Z");
             LoanRate loanRate = new LoanRate();
-            //LoanRates loanrtt = listaRatess.get(j);
-            //String str = "2016-03-04 11:30:40";
-            //DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-            //LocalDateTime dateTime = LocalDateTime.parse(str, formatter);
             DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-            //LocalDateTime localDate = LocalDateTime.parse("2021-10-07" + " 00:00:00", dtf);
-            //converted = loanrtt.getInitialdate() + "T00:00:00.000Z";////String.valueOf(convertToLocalDateTimeViaInstant(.getInitialdate()))+":00.000Z");
             converted = a.getFechaactivacion() + "T00:00:00.000Z";////String.valueOf(convertToLocalDateTimeViaInstant(.getInitialdate()))+":00.000Z");
             SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
             converted = sdf.format(a.getFechaactivacion());
@@ -436,17 +275,16 @@ public abstract class FacadeLoan<T> {
                 String f = String.valueOf(query_funcion.getSingleResult());
                 //Ahora consulta la tabla
                 Query query_pagos_amortizaciones = em.createNativeQuery(abonos_temporales_consulta);
-               
+
                 query_pagos_amortizaciones.setFirstResult(startPageIndex);
                 query_pagos_amortizaciones.setMaxResults(pageSize);
                 lista_objetos = query_pagos_amortizaciones.getResultList();
-                
-                
+
             } catch (Exception e) {
                 System.out.println("Error al buscar tabla pagos:" + e.getMessage());
             }
             for (Object[] obj : lista_objetos) {
-                
+
                 LoanPayment pago = new LoanPayment();
                 pago.setCapitalBalance(a.getSaldo().doubleValue());
                 pago.setFeeNumber(Integer.parseInt(obj[0].toString()));
@@ -485,9 +323,9 @@ public abstract class FacadeLoan<T> {
             System.out.println("Total eliminados:" + t_eliminados);
             em.getTransaction().commit();
         } catch (Exception e) {
-            System.out.println("Error al obtener el contador de movimientos:"+e.getMessage());
+            System.out.println("Error al obtener el contador de movimientos:" + e.getMessage());
         }
-        
+
         return tot;
     }
 
@@ -499,6 +337,8 @@ public abstract class FacadeLoan<T> {
             Query RsSai = em.createNativeQuery(sai_auxiliar);
             String sai = RsSai.getSingleResult().toString();
             String[] parts = sai.split("\\|");
+            List pocisiones_sai =  Arrays.asList(parts);
+            
             String sai_bankingly_prestamo_cuanto = "SELECT sai_bankingly_prestamo_cuanto(" + o + ","
                     + p + ","
                     + a + ","
@@ -506,7 +346,7 @@ public abstract class FacadeLoan<T> {
                     + tipoamortizacion + ",'" + sai + "')";
 
             Double interestAmount = 0.0, OverDueAmount = 0.0, principalAmount = 0.0, othersAmount = 0.0, principalAmountTotal = 0.0, intereses_creciente_adelanto = 0.0;
-
+            /*
             String sai_adelanto_de_interes = "SELECT sai_bankingly_monto_adelanto_interes(" + o + "," + p + "," + a + ",(SELECT date(fechatrabajo) FROM origenes limit 1),'" + sai + "')";
             System.out.println("calculo de intereses:" + sai_adelanto_de_interes);
 
@@ -514,43 +354,55 @@ public abstract class FacadeLoan<T> {
                 Query calculo_adelanto_intereses = em.createNativeQuery(sai_adelanto_de_interes);
                 intereses_creciente_adelanto = Double.parseDouble(String.valueOf(calculo_adelanto_intereses.getSingleResult()));
             } catch (Exception e) {
-            }
+            }*/
 
             try {
                 Query query_sai_bankingly_prestamo_cuanto = em.createNativeQuery(sai_bankingly_prestamo_cuanto);
                 String cadena_cuanto_prestamo = query_sai_bankingly_prestamo_cuanto.getSingleResult().toString();
                 String[] partes_cuanto_prestamo = cadena_cuanto_prestamo.split("\\|");
                 List lista_posiciones_cuanto_prestamo = Arrays.asList(partes_cuanto_prestamo);
-                //mnttotalcv = Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(0)));
-
-                principalAmountTotal = Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(1)))
-                        + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(2)))
-                        + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(3)))
-                        + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(4)))
+                
+                
+               /* principalAmountTotal
+                        = //Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(0)))
+                        //+ Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(1)))
+                        Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(2)))
+                        //+ Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(3)))
+                        //+ Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(4)))
                         + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(5)))
-                        + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(6)))
-                        + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(7))) + intereses_creciente_adelanto;
+                        + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(6)));// + intereses_creciente_adelanto;
+*/
+                /*interestAmount = Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(6)));/*
+                               + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(4)))
+                               + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(5)))
+                               + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(6)));*/
+                /*
+                OverDueAmount = Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(5)));// + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(6)));
 
-                interestAmount = Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(3))) + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(4)));
-                OverDueAmount = Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(5))) + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(6)));
                 principalAmount = Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(2)));
-
-                if (Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(2))) > 0) {
-                    othersAmount = Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(2)));
-                }
-
+                
+                */
+                
+               if(!pocisiones_sai.get(13).toString().toUpperCase().equals("C")){
+                interestAmount = Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(3)));
+                othersAmount = Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(4))) + Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(6)));;
+                OverDueAmount = Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(5)));
+                principalAmount = Double.parseDouble(String.valueOf(lista_posiciones_cuanto_prestamo.get(2)));
+                
+                principalAmountTotal = interestAmount + othersAmount + OverDueAmount + principalAmount;
+               }
             } catch (Exception e) {
 
             }
 
             FeesDueDataRS = new FeesDueData();
-            FeesDueDataRS.setFeesDueInterestAmount(interestAmount);
-            FeesDueDataRS.setFeesDueOthersAmount(othersAmount);
-            FeesDueDataRS.setFeesDueOverdueAmount(OverDueAmount);
-            FeesDueDataRS.setFeesDuePrincipalAmount(principalAmount);
-            FeesDueDataRS.setFeesDueTotalAmount(principalAmountTotal);
+            FeesDueDataRS.setFeesDueInterestAmount(interestAmount);//interestAmount);(Solo interes mortios
+            FeesDueDataRS.setFeesDueOthersAmount(othersAmount);//(iva de io + iva de im)
+            FeesDueDataRS.setFeesDueOverdueAmount(OverDueAmount);//(moratorio
+            FeesDueDataRS.setFeesDuePrincipalAmount(principalAmount);//monto vencido);(
+            FeesDueDataRS.setFeesDueTotalAmount(principalAmountTotal);//principalAmount);(monto vencido)
 
-            System.out.println("FeesDueData:" + FeesDueDataRS);
+            System.out.println("Detalle vencido :" + FeesDueDataRS);
         } catch (Exception e) {
             System.out.println("Error en FeesDueData:" + e.getMessage());
 
@@ -571,13 +423,14 @@ public abstract class FacadeLoan<T> {
             String sai = RsSai.getSingleResult().toString();
             String[] parts = sai.split("\\|");
             List list = Arrays.asList(parts);
-            abonosVencidos = Integer.parseInt(list.get(3).toString());
-            System.out.println("Abonos Vencidos:" + abonosVencidos);
+            double redondeado = Math.ceil(Double.parseDouble(list.get(2).toString()));            
+            abonosVencidos = (int) redondeado;            
         } catch (Exception e) {
             System.out.println("Error en FeesDueData:" + e.getMessage());
         } finally {
             em.close();
         }
+        System.out.println("El total de abonos vencidos es:" + abonosVencidos);
         return abonosVencidos;
     }
 
@@ -592,23 +445,17 @@ public abstract class FacadeLoan<T> {
             //Obtengo informacion con el sai_auxiliar hasta la fecha actual, si hay dudas checar el catalogo o atributos que devuelve la funcion(
             //Porque con el sai auxiliar obtengo fecha de la proxima amortizacion y voy a buscarla a la tabla de amortizaciones
             String sai_auxiliar = "SELECT * FROM sai_auxiliar(" + o + "," + p + "," + a + ",(SELECT date(fechatrabajo) FROM origenes limit 1))";
-            System.out.println("SAi:" + sai_auxiliar);
             Query RsSai = em.createNativeQuery(sai_auxiliar);
             String sai = RsSai.getSingleResult().toString();
             String[] parts = sai.split("\\|");
-            List list = Arrays.asList(parts);
+            List posiciones_sai = Arrays.asList(parts);
             Query query_next_fee = null;
             Amortizaciones amm = null;
             Double imvencido = 0.0, iovencido = 0.0, montoCuota = 0.0, intereses_creciente_adelanto = 0.0;
             Double interestAmount = 0.0, OverDueAmount = 0.0, principalAmount = 0.0, othersAmount = 0.0;
 
-            //::io_calculado+iva_io_total
-            /*iovencido = Double.parseDouble(list.get(6).toString()) + Double.parseDouble(list.get(17).toString());
-            imvencido = Double.parseDouble(list.get(15).toString()) + Double.parseDouble(list.get(18).toString());*/
             //Calculo adelanto de interese para prestamos crecientes y si es hipotecario me devuelve 0 la funcion
             String sai_adelanto_de_interes = "SELECT sai_bankingly_monto_adelanto_interes(" + o + "," + p + "," + a + ",(SELECT date(fechatrabajo) FROM origenes limit 1),'" + sai + "')";
-            System.out.println("calculo de intereses:" + sai_adelanto_de_interes);
-
             try {
                 Query calculo_adelanto_intereses = em.createNativeQuery(sai_adelanto_de_interes);
                 intereses_creciente_adelanto = Double.parseDouble(String.valueOf(calculo_adelanto_intereses.getSingleResult()));
@@ -617,43 +464,25 @@ public abstract class FacadeLoan<T> {
 
             int idamortizacion = 0;
             int estatus_amortizacion = 0;//El estatus de la amortizacion
-            if (list.get(13).toString().equals("C")) {
+            if (posiciones_sai.get(13).toString().equals("C")) {
                 //Obtengo la amortizacion que se vence
                 String consultaA = "SELECT * FROM amortizaciones WHERE idorigenp=" + o
                         + " AND idproducto=" + p
                         + " AND idauxiliar=" + a
-                        + " AND vence='" + list.get(10) + "' limit 1";
-                System.out.println("consulta_amortizacion:" + consultaA);
+                        + " AND vence='" + posiciones_sai.get(10) + "' limit 1";
                 query_next_fee = em.createNativeQuery(consultaA, Amortizaciones.class);
                 amm = (Amortizaciones) query_next_fee.getSingleResult();
 
-                //Verifico los seguros hipotecarios
-                /*try {
-                    String consulta_seguros_hipotecarios = "SELECT COALESCE(sum(apagar+ivaapagar),0) FROM "
-                                                     + " sai_prestamos_hipotecarios_calcula_seguro_a_pagar("+aux.getAuxiliaresPK().getIdorigenp()+","
-                                                                                                            +aux.getAuxiliaresPK().getIdproducto()+","
-                                                                                                            +aux.getAuxiliaresPK().getIdauxiliar()+","
-                                                    +"(SELECT date(fechatrabajo) FROM origenes limit 1))";
-                    System.out.println("Consulta seguros hipotecarios:"+consulta_seguros_hipotecarios);
-                    Query query_seguros_hipotecarios=em.createNativeQuery(consulta_seguros_hipotecarios);
-                    seguros_hipotecarios=Double.parseDouble(String.valueOf(query_seguros_hipotecarios.getSingleResult()));
-                    
-                } catch (Exception e) {
-                    seguros_hipotecarios = 0.0;
-                }*/
-                System.out.println("Fecha vence : " + list.get(10));
-                System.out.println("Amortizacion abono:" + amm.getAbono() + " abonoPag:" + amm.getAbonopag());
                 if (Double.parseDouble(amm.getAbono().toString()) == Double.parseDouble(amm.getAbonopag().toString())) {
                     estatus_amortizacion = 3;
                 } else if (Double.parseDouble(amm.getAbono().toString()) > Double.parseDouble(amm.getAbonopag().toString()) && amm.getTodopag() == false) {
                     estatus_amortizacion = 1;
-                } else if (!list.get(13).toString().equals("C")) {//Si esta vencido
+                } else if (!posiciones_sai.get(13).toString().toUpperCase().equals("C")) {//Si esta vencido
                     estatus_amortizacion = 2;
                 }
                 idamortizacion = amm.getAmortizacionesPK().getIdamortizacion();
                 //Double montovencido = Double.parseDouble(list.get(4).toString());
             } else {
-                System.out.println("Entro aqui");
                 //Obtengo el idamortizacion que no hay que cubrir
                 String consulta_id_amortizaciones = "SELECT idamortizacion FROM amortizaciones WHERE idorigenp=" + o
                         + " AND idproducto=" + p
@@ -671,7 +500,6 @@ public abstract class FacadeLoan<T> {
                     + aux.getAuxiliaresPK().getIdauxiliar() + ","
                     + "(SELECT date(fechatrabajo) FROM origenes limit 1)" + ","
                     + aux.getTipoamortizacion() + ",'" + sai + "')";
-            System.out.println("Cadena sai prestao cuento:" + sai_bankingly_prestamo_cuanto);
             try {
                 Query query_sai_bankingly_prestamo_cuanto = em.createNativeQuery(sai_bankingly_prestamo_cuanto);
                 String cadena_cuanto_prestamo = query_sai_bankingly_prestamo_cuanto.getSingleResult().toString();
@@ -699,23 +527,14 @@ public abstract class FacadeLoan<T> {
             loanFee.setCapitalBalance(Double.parseDouble(aux.getSaldo().toString()));//Saldo o balance actual del prestamo
             loanFee.setFeeNumber(idamortizacion);//(amm.getAmortizacionesPK().getIdorigenp() + amm.getAmortizacionesPK().getIdproducto() + amm.getAmortizacionesPK().getIdauxiliar() + amm.getAmortizacionesPK().getIdamortizacion());//Numero de cuota
             loanFee.setPrincipalAmount(principalAmount);//monto de la cuota
-            loanFee.setDueDate(String.valueOf(list.get(10)));//fecha de vencimiento
+            loanFee.setDueDate(String.valueOf(posiciones_sai.get(10)));//fecha de vencimiento
             loanFee.setInterestAmount(interestAmount);//Monto de interes io + ivaio
             loanFee.setOverdueAmount(OverDueAmount);//Monto im+ivaim
             loanFee.setFeeStatusId(estatus_amortizacion);//Estado de la amortizacion
             loanFee.setOthersAmount(othersAmount);//Otros conceptos asociados seguros si tiene hipotecario
             loanFee.setTotalAmount(montoCuota);//Monto total de la cuota
 
-            /*loanFee = new LoanFee(
-                    Double.parseDouble(aux.getSaldo().toString()),//Saldo o balance del prestamo principal
-                    amm.getAmortizacionesPK().getIdorigenp() + amm.getAmortizacionesPK().getIdproducto() + amm.getAmortizacionesPK().getIdauxiliar() + amm.getAmortizacionesPK().getIdamortizacion(),
-                    Double.parseDouble(amm.getAbono().toString()),
-                    amm.getVence().toString(),
-                    iovencido,
-                    imvencido,
-                    loanf.getId(),
-                    Double.parseDouble(amm.getAbono().toString()),
-                    abonoT);*/
+            System.out.println("Proxima cuota : " + loanFee);
         } catch (Exception e) {
             System.out.println("Error en obtener la prxima cuota:" + e.getMessage());
         } finally {
@@ -783,9 +602,11 @@ public abstract class FacadeLoan<T> {
         EntityManager em = AbstractFacade.conexion();
         int cont = 0;
         OpaDTO opa = util.opa(productBankIdentifier);
+        //Identificador 1 es fees y 2 es payments
+
         try {
             String consulta = "";
-            if (feesstatus <= 2) {
+            if (feesstatus != 2) {
                 if (identificador == 1) {
                     if (feesstatus == 1) {
                         consulta = "SELECT count(*) FROM amortizaciones WHERE idorigenp=" + opa.getIdorigenp() + " AND idproducto=" + opa.getIdproducto() + "AND idauxiliar=" + opa.getIdauxiliar() + " AND todopag=true";
@@ -795,7 +616,7 @@ public abstract class FacadeLoan<T> {
                         consulta = "SELECT count(*) FROM amortizaciones WHERE idorigenp=" + opa.getIdorigenp() + " AND idproducto=" + opa.getIdproducto() + "AND idauxiliar=" + opa.getIdauxiliar();
                     }
 
-                } else if (identificador == 2) {
+                } else if (identificador == 3) {
                     consulta = "SELECT count(*) FROM auxiliares_d WHERE idorigenp=" + opa.getIdorigenp() + " AND idproducto=" + opa.getIdproducto() + "AND idauxiliar=" + opa.getIdauxiliar();
                 }
                 Query query = em.createNativeQuery(consulta);

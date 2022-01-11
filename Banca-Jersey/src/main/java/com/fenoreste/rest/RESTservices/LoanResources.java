@@ -5,10 +5,13 @@
  */
 package com.fenoreste.rest.RESTservices;
 
+import com.fenoreste.rest.DTO.OpaDTO;
 import com.fenoreste.rest.ResponseDTO.LoanDTO;
 import com.fenoreste.rest.ResponseDTO.LoanFee;
 import com.fenoreste.rest.ResponseDTO.LoanPayment;
 import com.fenoreste.rest.ResponseDTO.LoanRate;
+import com.fenoreste.rest.Util.Utilidades;
+import com.fenoreste.rest.Util.UtilidadesGenerales;
 import com.fenoreste.rest.dao.LoanDAO;
 import com.github.cliftonlabs.json_simple.JsonObject;
 import java.util.List;
@@ -27,14 +30,16 @@ import org.json.JSONObject;
 @Path("/Loan")
 public class LoanResources {
 
+    UtilidadesGenerales util = new UtilidadesGenerales();
+    Utilidades util2 = new Utilidades();
+
     @POST
     @Produces({MediaType.APPLICATION_JSON + ";charset=utf-8"})
     @Consumes({MediaType.APPLICATION_JSON + ";charset=utf-8"})
     public Response loan(String cadena) {
-        System.out.println("Cadena:" + cadena);
+
         String productBankIdentifier = "";
         JsonObject Error = new JsonObject();
-        System.out.println("sisisiis");
         LoanDAO dao = new LoanDAO();
         if (!dao.actividad_horario()) {
             Error.put("ERROR", "VERIFIQUE SU HORARIO DE ACTIVIDAD FECHA,HORA O CONTACTE A SU PROVEEEDOR");
@@ -46,25 +51,27 @@ public class LoanResources {
             int o = Integer.parseInt(productBankIdentifier.substring(0, 6));
             int p = Integer.parseInt(productBankIdentifier.substring(6, 11));
             int a = Integer.parseInt(productBankIdentifier.substring(11, 19));
-            System.out.println("xiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii");
-            System.out.println(""+o+"-"+p+"-"+a);
+            System.out.println("" + o + "-" + p + "-" + a);
             if (dao.tipoproducto(p) != 2) {
                 Error.put("Error", "Producto no valido para LOANS");
                 return Response.status(Response.Status.BAD_REQUEST).entity(Error).build();
             }
-            /*feesStatus = jsonRecibido.getInt("feesStatus");
-            JSONObject json = jsonRecibido.getJSONObject("paging");
-            pageSize = json.getInt("pageSize");
-            pageStartIndex = json.getInt("pageStartIndex");*/
+
+            OpaDTO opa = util2.opa(productBankIdentifier);
+            if (util.validacionSopar(opa.getIdorigenp(), opa.getIdproducto(), opa.getIdauxiliar(), 2)) {
+                Error.put("ERROR", "SOCIO BLOQUEADO");
+                return Response.status(Response.Status.UNAUTHORIZED).entity(Error).build();
+            }
+
         } catch (Exception e) {
-            Error.put("Error", "Error en parametros JSON:"+e.getMessage());
+            Error.put("Error", "Error en parametros JSON:" + e.getMessage());
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(Error).build();
         }
 
-        int count = 0;
         try {
             LoanDTO loan = dao.Loan(productBankIdentifier);
             JsonObject j = new JsonObject();
+            System.out.println("Loan : " + loan);
             j.put("Loan", loan);
             return Response.status(Response.Status.OK).entity(j).build();
         } catch (Exception e) {
@@ -81,7 +88,6 @@ public class LoanResources {
     @Consumes({MediaType.APPLICATION_JSON})
     @Produces({MediaType.APPLICATION_JSON})
     public Response loanFee(String cadena) {
-        System.out.println("Cadena:" + cadena);
         String productBankIdentifier = "";
         JsonObject Error = new JsonObject();
         int feeNumber = 0;
@@ -106,6 +112,12 @@ public class LoanResources {
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(Error).build();
         }
 
+        OpaDTO opa = util2.opa(productBankIdentifier);
+        if (util.validacionSopar(opa.getIdorigenp(), opa.getIdproducto(), opa.getIdauxiliar(), 2)) {
+            Error.put("ERROR", "SOCIO BLOQUEADO");
+            return Response.status(Response.Status.UNAUTHORIZED).entity(Error).build();
+        }
+
         try {
             LoanFee loan = dao.LoanFee(productBankIdentifier, feeNumber);
             JsonObject j = new JsonObject();
@@ -120,14 +132,15 @@ public class LoanResources {
     }
 
     @POST
-    @Path("/Fees")
+    @Path("/fsfjfsfjfjsFees")
     @Consumes({MediaType.APPLICATION_JSON})
     @Produces({MediaType.APPLICATION_JSON})
     public Response loanFees(String cadena) {
-        System.out.println("Cadena:" + cadena);
+        System.out.println("Peticion loanFeesResult:" + cadena);
         String productBankIdentifier = "";
         JsonObject Error = new JsonObject();
-        int feesStatus = 0, pageSize = 0, pageStartIndex = 0;
+        int feeStatus = 0, pageSize = 0, pageStartIndex = 0;
+
         LoanDAO dao = new LoanDAO();
         if (!dao.actividad_horario()) {
             Error.put("ERROR", "VERIFIQUE SU HORARIO DE ACTIVIDAD FECHA,HORA O CONTACTE A SU PROVEEEDOR");
@@ -135,15 +148,21 @@ public class LoanResources {
         }
         try {
             String order = "";
+            
             try {
                 JSONObject jsonRecibido = new JSONObject(cadena);
                 productBankIdentifier = jsonRecibido.getString("productBankIdentifier");
-                feesStatus = jsonRecibido.getInt("feesStatus");
+                feeStatus = jsonRecibido.getInt("feesStatus");
                 JSONObject json = jsonRecibido.getJSONObject("paging");
-                pageSize = json.getInt("pageSize");
-                pageStartIndex = json.getInt("pageStartIndex");
-                order = json.getString("orderByField");
-                System.out.println("order:" + order);
+                if (!json.toString().contains("null")) {
+                    pageSize = json.getInt("pageSize");
+                    pageStartIndex = json.getInt("pageStartIndex");
+                    order = json.getString("orderByField");
+                }else{
+                    pageSize = 10;
+                    pageStartIndex = 0;
+                }
+
                 int o = Integer.parseInt(productBankIdentifier.substring(0, 6));
                 int p = Integer.parseInt(productBankIdentifier.substring(6, 11));
                 int a = Integer.parseInt(productBankIdentifier.substring(11, 19));
@@ -156,16 +175,22 @@ public class LoanResources {
                 return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(Error).build();
             }
 
+            OpaDTO opa = util2.opa(productBankIdentifier);
+            if (util.validacionSopar(opa.getIdorigenp(), opa.getIdproducto(), opa.getIdauxiliar(), 2)) {
+                Error.put("ERROR", "SOCIO BLOQUEADO");
+                return Response.status(Response.Status.UNAUTHORIZED).entity(Error).build();
+            }
+            System.out.println("loanFeeStatus:" + feeStatus + ",pageSize:" + pageSize + ",pageStartIndex:" + pageStartIndex + ",orderByField:" + order);
             try {
-                List<LoanFee> loan = dao.LoanFees(productBankIdentifier, feesStatus, pageSize, pageStartIndex, order);
+                List<LoanFee> loan = dao.LoanFees(productBankIdentifier, feeStatus, pageSize, pageStartIndex, order);
                 JsonObject j = new JsonObject();
 
-                int t = dao.contadorGeneral(productBankIdentifier, 1, 0);
+                int t = dao.contadorGeneral(productBankIdentifier, 1, feeStatus);
                 if (t > 0) {
                     j.put("Fees", loan);
                     j.put("LoanFeesCount", t);
-                }else{
-                    j.put("Error","No se encontraron cuotas para el estatus:"+feesStatus);
+                } else {
+                    j.put("Error", "No se encontraron cuotas para el estatus:" + feeStatus);
                 }
 
                 return Response.status(Response.Status.OK).entity(j).build();
@@ -198,9 +223,12 @@ public class LoanResources {
         try {
             JSONObject jsonRecibido = new JSONObject(cadena);
             productBankIdentifier = jsonRecibido.getString("productBankIdentifier");
-            JSONObject json = jsonRecibido.getJSONObject("paging");
-            pageSize = json.getInt("pageSize");
-            pageStartIndex = json.getInt("pageStartIndex");
+            JSONObject paging = jsonRecibido.getJSONObject("paging");
+            if (!paging.toString().contains("null")) {
+                pageSize = paging.getInt("pageSize");
+                pageStartIndex = paging.getInt("pageStartIndex");
+            }
+
             int o = Integer.parseInt(productBankIdentifier.substring(0, 6));
             int p = Integer.parseInt(productBankIdentifier.substring(6, 11));
             int a = Integer.parseInt(productBankIdentifier.substring(11, 19));
@@ -212,9 +240,15 @@ public class LoanResources {
             Error.put("Error", "Error en parametros JSON:" + e.getMessage());
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(Error).build();
         }
+
+        OpaDTO opa = util2.opa(productBankIdentifier);
+        if (util.validacionSopar(opa.getIdorigenp(), opa.getIdproducto(), opa.getIdauxiliar(), 2)) {
+            Error.put("ERROR", "SOCIO BLOQUEADO");
+            return Response.status(Response.Status.UNAUTHORIZED).entity(Error).build();
+        }
+
         try {
             List<LoanRate> loan = dao.LoanRates(productBankIdentifier, pageSize, pageStartIndex);
-            System.out.println("Loan reta:"+loan);
             JsonObject j = new JsonObject();
             j.put("Rates", loan);
             j.put("LoanRatesCount", loan.size());
@@ -225,7 +259,7 @@ public class LoanResources {
     }
 
     @POST
-    @Path("/Payments")
+    @Path("/sdsPaydddmentssssssssss")
     @Consumes({MediaType.APPLICATION_JSON})
     @Produces({MediaType.APPLICATION_JSON})
     public Response loanPayments(String cadena) {
@@ -241,9 +275,11 @@ public class LoanResources {
         try {
             JSONObject jsonRecibido = new JSONObject(cadena);
             productBankIdentifier = jsonRecibido.getString("productBankIdentifier");
-            JSONObject json = jsonRecibido.getJSONObject("paging");
-            pageSize = json.getInt("pageSize");
-            pageStartIndex = json.getInt("pageStartIndex");
+            JSONObject paging = jsonRecibido.getJSONObject("paging");
+            if(!paging.toString().contains("null")){
+                pageSize = paging.getInt("pageSize");
+                pageStartIndex = paging.getInt("pageStartIndex");
+            }            
             int o = Integer.parseInt(productBankIdentifier.substring(0, 6));
             int p = Integer.parseInt(productBankIdentifier.substring(6, 11));
             int a = Integer.parseInt(productBankIdentifier.substring(11, 19));
@@ -256,12 +292,17 @@ public class LoanResources {
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(Error).build();
         }
 
-        int count = 0;
+        OpaDTO opa = util2.opa(productBankIdentifier);
+        if (util.validacionSopar(opa.getIdorigenp(), opa.getIdproducto(), opa.getIdauxiliar(), 2)) {
+            Error.put("ERROR", "SOCIO BLOQUEADO");
+            return Response.status(Response.Status.UNAUTHORIZED).entity(Error).build();
+        }
+
         try {
             List<LoanPayment> ListPayment = dao.loanPayments(productBankIdentifier, pageSize, pageStartIndex);
             JsonObject j = new JsonObject();
             int t = dao.contadorGeneral(productBankIdentifier, 2, 0);
-            j.put("Payments", ListPayment);
+            j.put("Payments", 0);;//ListPayment);
             j.put("LoanPaymentsCount", dao.contador_registros(productBankIdentifier));
             return Response.status(Response.Status.OK).entity(j).build();
         } catch (Exception e) {

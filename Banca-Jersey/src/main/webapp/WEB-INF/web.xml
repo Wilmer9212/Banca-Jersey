@@ -5,11 +5,11 @@
 <web-app>
     
     <display-name>Archetype Created Web Application</display-name>
-    
+   <!-- 
     <listener>
         <listener-class>com.fenoreste.rest.Util.MySessionListener</listener-class>
     </listener>
-   
+   -->
     
     <servlet>
         <servlet-name>services</servlet-name>
@@ -31,9 +31,10 @@
         <url-pattern>/services/*</url-pattern>
     </servlet-mapping>
     
+    <!--
     <session-config>
         <session-timeout>500</session-timeout>
-    </session-config>
+    </session-config>-->
     
    
 

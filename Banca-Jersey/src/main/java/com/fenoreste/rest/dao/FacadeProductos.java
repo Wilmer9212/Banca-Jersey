@@ -8,8 +8,8 @@ import com.fenoreste.rest.ResponseDTO.ProductBankStatementDTO;
 import com.fenoreste.rest.Util.AbstractFacade;
 import com.fenoreste.rest.ResponseDTO.ProductsConsolidatePositionDTO;
 import com.fenoreste.rest.ResponseDTO.ProductsDTO;
+import com.fenoreste.rest.Util.TimerBeepClock;
 import com.fenoreste.rest.Util.Utilidades;
-import com.fenoreste.rest.WsTDD.SaldoTddPK;
 import com.fenoreste.rest.WsTDD.TarjetaDeDebito;
 import com.fenoreste.rest.entidades.Auxiliares;
 import com.fenoreste.rest.entidades.Catalog_Status_Bankingly;
@@ -20,7 +20,6 @@ import com.fenoreste.rest.entidades.PersonasPK;
 import com.fenoreste.rest.entidades.Productos;
 import com.fenoreste.rest.entidades.Tablas;
 import com.fenoreste.rest.entidades.TablasPK;
-import com.fenoreste.rest.entidades.WsSiscoopFoliosTarjetas1;
 import com.fenoreste.rest.entidades.WsSiscoopFoliosTarjetasPK1;
 import com.itextpdf.html2pdf.ConverterProperties;
 import com.itextpdf.html2pdf.HtmlConverter;
@@ -33,12 +32,8 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
-import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.math.BigDecimal;
-import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -46,6 +41,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import javax.persistence.EntityManager;
 import javax.persistence.Query;
@@ -54,11 +52,10 @@ import org.eclipse.persistence.config.QueryHints;
 
 public abstract class FacadeProductos<T> {
 
-    private final Date hoy = new Date();
-
     UtilidadesGenerales util2 = new UtilidadesGenerales();
 
     public FacadeProductos(Class<T> entityClass) {
+        horaEjecutaAlerta();
     }
     Utilidades util = new Utilidades();
 
@@ -75,7 +72,7 @@ public abstract class FacadeProductos<T> {
                 consulta = "SELECT * FROM auxiliares a INNER JOIN tipos_cuenta_bankingly USING(idproducto) WHERE replace((to_char(a.idorigen,'099999')||to_char(a.idgrupo,'09')||to_char(a.idsocio,'099999')),' ','')='" + clientBankIdentifiers + "' AND a.estatus=2";
             }
             Query query = em.createNativeQuery(consulta, Auxiliares.class);
-            List<Auxiliares> ListaA = query.setHint(QueryHints.CACHE_USAGE,CacheUsage.DoNotCheckCache).getResultList();
+            List<Auxiliares> ListaA = query.setHint(QueryHints.CACHE_USAGE, CacheUsage.DoNotCheckCache).getResultList();
 
             for (int i = 0; i < ListaA.size(); i++) {
                 ProductsDTO auxi = new ProductsDTO();
@@ -84,12 +81,12 @@ public abstract class FacadeProductos<T> {
                 try {
                     ccb = em.find(Productos_bankingly.class, a.getAuxiliaresPK().getIdproducto());
                     productTypeId = String.valueOf(ccb.getProductTypeId());
-                   
+
                 } catch (Exception e) {
                     productTypeId = "";
                 }
-                
-                Productos pr = em.find(Productos.class,a.getAuxiliaresPK().getIdproducto());
+
+                Productos pr = em.find(Productos.class, a.getAuxiliaresPK().getIdproducto());
 
                 String og = String.format("%06d", a.getIdorigen()) + String.format("%02d", a.getIdgrupo());
                 String s = String.format("%06d", a.getIdsocio());
@@ -105,20 +102,25 @@ public abstract class FacadeProductos<T> {
                 } catch (Exception ex) {
                     sttt = 0;
                 }
-                String canTransact="";
-                
-                if(util2.obtenerOrigen(em).toUpperCase().replace(" ","").contains("SANNICOLAS")){
-                   Tablas producto_retiro=util2.busquedaTabla(em,"bankingly_banca_movil","producto_retiro");
-                   if(a.getAuxiliaresPK().getIdproducto()==Integer.parseInt(producto_retiro.getDato1())){
-                       canTransact="3";
-                   }else{
-                       canTransact = "2";
-                   }
+                String canTransact = "";
+
+                if (util2.obtenerOrigen(em) == 30200) {
+                    if (ccb.getProductTypeId() != 4) {
+                        Tablas producto_retiro = util2.busquedaTabla(em, "bankingly_banca_movil", "producto_retiro");
+                        if (a.getAuxiliaresPK().getIdproducto() == Integer.parseInt(producto_retiro.getDato1())) {
+                            canTransact = "3";
+                        } else {
+                            canTransact = "2";
+                        }
+                    } else {
+                        canTransact = "0";
+                    }
+
                 }
-                
+
                 auxi = new ProductsDTO();
-                auxi.setClientBankIdentifier(og+s);
-                auxi.setProductBankIdentifier(op+aa);
+                auxi.setClientBankIdentifier(og + s);
+                auxi.setProductBankIdentifier(op + aa);
                 auxi.setProductNumber(String.valueOf(a.getAuxiliaresPK().getIdproducto()));
                 auxi.setProductStatusId(sttt);
                 auxi.setProductTypeId(productTypeId);
@@ -134,8 +136,8 @@ public abstract class FacadeProductos<T> {
                         descripcion,
                         canTransact,//Solo lo que se puede hacer en el producto
                         "1");*/
-      
-                
+
+
                 ListagetP.add(auxi);
                 productTypeId = "";
                 descripcion = "";
@@ -178,7 +180,7 @@ public abstract class FacadeProductos<T> {
                     saldo = a.getSaldo();
 
                     //Verificamos cual es el origen 
-                    if (util2.obtenerOrigen(em).contains("SANNICOLAS")) {
+                    if (util2.obtenerOrigen(em) == 30200) {
                         //Buscamo la tdd
                         Tablas tablaTDD = util2.busquedaTabla(em, "bankingly_banca_movil", "producto_tdd");
                         //Si el producto es la TDD obtenemos el saldo del WEB SErvice de Alestra
@@ -205,25 +207,34 @@ public abstract class FacadeProductos<T> {
                     int cuotas_pagadas = 0;
                     Double total_cuotas = 0.0;
                     String proximo_pago = "";
+                    String canTransact = "";
 
+                    Tablas producto_retiro = util2.busquedaTabla(em, "bankingly_banca_movil", "producto_retiro");
                     //Busco el producto en el catalogo de cuentas baniingly
                     Productos_bankingly tipo_cuenta_bankingly = em.find(Productos_bankingly.class, a.getAuxiliaresPK().getIdproducto());
-                    
+
+                    if (a.getAuxiliaresPK().getIdproducto() == Integer.parseInt(producto_retiro.getDato1())) {
+                        canTransact = "3";
+                    } else {
+                        canTransact = "2";
+                    }
+
                     //si es una inversion porque los datos en el sai_auxilair lo da de diferente manera por eso identificamos que sea una inversion
                     if (tipo_cuenta_bankingly.getProductTypeId() == 4) {
                         try {
-                            String sai_inversion_find="SELECT sai_auxiliar(" + a.getAuxiliaresPK().getIdorigenp() + ","
+                            String sai_inversion_find = "SELECT sai_auxiliar(" + a.getAuxiliaresPK().getIdorigenp() + ","
                                     + a.getAuxiliaresPK().getIdproducto() + "," + a.getAuxiliaresPK().getIdauxiliar() + ",(SELECT date(fechatrabajo) FROM origenes LIMIT 1))";
-                            
+
                             Query query_inversiones_sai = em.createNativeQuery(sai_inversion_find);
                             String sai_inversion = (String) query_inversiones_sai.getSingleResult();
                             String[] partes_sai_inversiones = sai_inversion.split("\\|");
                             List lista_posciones_sai_inversiones = Arrays.asList(partes_sai_inversiones);
-                            String[]partes_fecha_vencimiento=lista_posciones_sai_inversiones.get(2).toString().split("/");
-                            
-                            vencimiento =partes_fecha_vencimiento[2]+"-"+partes_fecha_vencimiento[1]+"-"+partes_fecha_vencimiento[0];// String.valueOf(lista_posciones_sai_inversiones.get(2).toString().replace("/","-"));
-                            
-                            tasa = Double.parseDouble(a.getTasaio().toString());
+                            String[] partes_fecha_vencimiento = lista_posciones_sai_inversiones.get(2).toString().split("/");
+
+                            vencimiento = partes_fecha_vencimiento[2] + "-" + partes_fecha_vencimiento[1] + "-" + partes_fecha_vencimiento[0];// String.valueOf(lista_posciones_sai_inversiones.get(2).toString().replace("/","-"));
+
+                            tasa = Double.parseDouble(a.getTasaio().toString()) * 12;
+                            canTransact = "0";
 
                         } catch (Exception e) {
                             System.out.println("Error en amor:" + e.getMessage());
@@ -265,7 +276,7 @@ public abstract class FacadeProductos<T> {
                     Origenes origen = em.find(Origenes.class, a.getAuxiliaresPK().getIdorigenp());
                     PersonasPK pk = new PersonasPK(a.getIdorigen(), a.getIdgrupo(), a.getIdsocio());
                     Persona p = em.find(Persona.class, pk);
-                    Productos pr=em.find(Productos.class, opa.getIdproducto());
+                    Productos pr = em.find(Productos.class, opa.getIdproducto());
                     ProductsConsolidatePositionDTO dto = new ProductsConsolidatePositionDTO();
                     dto.setClientBankIdentifier(clientBankIdentifier);
                     dto.setProductBankIdentifier(productsBank.get(ii));
@@ -283,7 +294,7 @@ public abstract class FacadeProductos<T> {
                     dto.setNextFeeDueDate(proximo_pago);
                     dto.setProductOwnerName(p.getNombre() + " " + p.getAppaterno() + " " + p.getApmaterno());
                     dto.setProductBranchName(origen.getNombre());
-                    dto.setCanTransact(1);
+                    dto.setCanTransact(Integer.parseInt(canTransact));
                     dto.setSubsidiaryId(1);
                     dto.setSubsidiaryName("");
                     dto.setBackendId(1);
@@ -302,7 +313,6 @@ public abstract class FacadeProductos<T> {
 
     }
 
-    
     public List<ProductBankStatementDTO> statements(String cliente, String productBankIdentifier, int productType) {
         EntityManager em = AbstractFacade.conexion();
         List<ProductBankStatementDTO> listaEstadosDeCuenta = new ArrayList<>();
@@ -340,7 +350,7 @@ public abstract class FacadeProductos<T> {
 
                 int total_estados = Integer.parseInt(String.valueOf(tbEstados_Cuenta.getDato1()));
                 for (int i = 0; i < total_estados; i++) {
-                    System.out.println("siiiiiiiiiiiiiiiii:"+i);
+                    System.out.println("siiiiiiiiiiiiiiiii:" + i);
                     ProductBankStatementDTO estadoCuenta = new ProductBankStatementDTO();
                     ff = String.valueOf(localDate.plusMonths(-i));
                     fi = String.valueOf(localDate.plusMonths(-i - 1));
@@ -584,6 +594,15 @@ public abstract class FacadeProductos<T> {
         }
 
         return bandera_;
+    }
+
+    //Iniciar hilo para eliminar pdf 
+    public void horaEjecutaAlerta() {
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        Runnable task = new TimerBeepClock();
+        int initialDelay = 1;
+        int periodicDelay = 1;
+        scheduler.scheduleAtFixedRate(task, initialDelay, periodicDelay, TimeUnit.SECONDS);
     }
 
 }

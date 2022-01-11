@@ -1,5 +1,6 @@
 package com.fenoreste.rest.RESTservices;
 
+import com.fenoreste.rest.DTO.OgsDTO;
 import com.fenoreste.rest.ResponseDTO.ProductsConsolidatePositionDTO;
 import com.fenoreste.rest.ResponseDTO.ProductsDTO;
 import com.fenoreste.rest.Util.Authorization;
@@ -17,6 +18,8 @@ import javax.ws.rs.HeaderParam;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import com.fenoreste.rest.ResponseDTO.*;
+import com.fenoreste.rest.Util.Utilidades;
+import com.fenoreste.rest.Util.UtilidadesGenerales;
 import java.io.File;
 import java.io.FileFilter;
 import java.nio.file.Files;
@@ -31,6 +34,8 @@ import java.util.Base64;
 public class ProductsResources {
 
     Authorization auth = new Authorization();
+    UtilidadesGenerales util = new UtilidadesGenerales();
+    Utilidades util2 = new Utilidades();
 
     @POST
     @Produces({MediaType.APPLICATION_JSON + ";charset=utf-8"})
@@ -71,11 +76,18 @@ public class ProductsResources {
           Si las credenciales son correctas avanza        
          ================================================================================================*/
         ProductsDAO dao = new ProductsDAO();
-        
-        if(!dao.actividad_horario()){
-            jsonError.put("ERROR","VERIFIQUE SU HORARIO DE ACTIVIDAD FECHA,HORA O CONTACTE A SU PROVEEEDOR");
+
+        if (!dao.actividad_horario()) {
+            jsonError.put("ERROR", "VERIFIQUE SU HORARIO DE ACTIVIDAD FECHA,HORA O CONTACTE A SU PROVEEEDOR");
             return Response.status(Response.Status.BAD_REQUEST).entity(jsonError).build();
         }
+
+        OgsDTO ogs = util2.ogs(ClientBankIdentifiers);
+        if (util.validacionSopar(ogs.getIdorigen(), ogs.getIdgrupo(), ogs.getIdsocio(), 1)) {
+            jsonError.put("ERROR", "SOCIO BLOQUEADO");
+            return Response.status(Response.Status.BAD_REQUEST).entity(jsonError).build();
+        }
+
         try {
             List<ProductsDTO> listaDTO = dao.getProductos(ClientBankIdentifiers, ProductTypes);
             if (listaDTO != null) {
@@ -88,8 +100,8 @@ public class ProductsResources {
             }
         } catch (Exception e) {
             System.out.println("Error interno en el servidor");
-            
-        } 
+
+        }
 
         return null;
 
@@ -100,14 +112,14 @@ public class ProductsResources {
     @Produces({MediaType.APPLICATION_JSON + ";charset=utf-8"})
     @Consumes({MediaType.APPLICATION_JSON + ";charset=utf-8"})
     public Response getProductsConsolidatedPosition(String cadena) {
-              
+
         /*SOLO FALTA DEL CATALOGO CAN TRANSACT ID*/
         System.out.println("Cadena:" + cadena);
         String ClientBankIdentifiers = "", ProductBankIdentifiers = "";
         JsonObject jsonError = new JsonObject();
         List<String> productsBank = new ArrayList<String>();
         try {
-            
+
             JSONObject Object = new JSONObject(cadena);
             JSONArray jsonCB = Object.getJSONArray("clientBankIdentifiers");
             JSONArray jsonPB = Object.getJSONArray("productBankIdentifiers");
@@ -128,12 +140,18 @@ public class ProductsResources {
         } catch (Exception e) {
             System.out.println("Error al convertir Json:" + e.getMessage());
         }
-        
+
+        OgsDTO ogs = util2.ogs(ClientBankIdentifiers);
+        if (util.validacionSopar(ogs.getIdorigen(), ogs.getIdgrupo(), ogs.getIdsocio(), 1)) {
+            jsonError.put("ERROR", "SOCIO BLOQUEADO");
+            return Response.status(Response.Status.BAD_REQUEST).entity(jsonError).build();
+        }
+
         ProductsDAO dao = new ProductsDAO();
-        
-         if(!dao.actividad_horario()){
-            jsonError.put("ERROR","VERIFIQUE SU HORARIO DE ACTIVIDAD FECHA,HORA O CONTACTE A SU PROVEEEDOR");
-             return Response.status(Response.Status.BAD_REQUEST).entity(jsonError).build();
+
+        if (!dao.actividad_horario()) {
+            jsonError.put("ERROR", "VERIFIQUE SU HORARIO DE ACTIVIDAD FECHA,HORA O CONTACTE A SU PROVEEEDOR");
+            return Response.status(Response.Status.BAD_REQUEST).entity(jsonError).build();
         }
         try {
             List<ProductsConsolidatePositionDTO> ListPC = dao.ProductsConsolidatePosition(ClientBankIdentifiers, productsBank);
@@ -148,8 +166,8 @@ public class ProductsResources {
             }
         } catch (Exception e) {
             System.out.println("Error aqui:" + e.getMessage());
-            
-        } 
+
+        }
 
         return null;
 
@@ -171,31 +189,37 @@ public class ProductsResources {
             actividad.put("Error","Su zona horaria no coincide con la del servidor.");
             return Response.status(Response.Status.GATEWAY_TIMEOUT).entity(actividad).build();
         }*/
-        
+
         ProductsDAO dao = new ProductsDAO();
-         if(!dao.actividad_horario()){
-            json.put("ERROR","VERIFIQUE SU HORARIO DE ACTIVIDAD FECHA,HORA O CONTACTE A SU PROVEEEDOR");
+        if (!dao.actividad_horario()) {
+            json.put("ERROR", "VERIFIQUE SU HORARIO DE ACTIVIDAD FECHA,HORA O CONTACTE A SU PROVEEEDOR");
             return Response.status(Response.Status.BAD_REQUEST).entity(json).build();
         }
         try {
             clientBankIdentifier_ = request_.getString("clientBankIdentifier");
             productBankIdentifier_ = request_.getString("productBankIdentifier");
+
+            OgsDTO ogs = util2.ogs(clientBankIdentifier_);
+            if (util.validacionSopar(ogs.getIdorigen(), ogs.getIdgrupo(), ogs.getIdsocio(), 1)) {
+                json.put("ERROR", "SOCIO BLOQUEADO");
+                return Response.status(Response.Status.BAD_REQUEST).entity(json).build();
+            }
+
             productType_ = request_.getInt("productType");
             List<ProductBankStatementDTO> listaECuentas = dao.statements(clientBankIdentifier_, productBankIdentifier_, productType_);
-            
+
             json.put("bankStatements", listaECuentas);
-           
-                eliminarPorExtension(ruta(),"txt");
-                eliminarPorExtension(ruta(),"html");
-            
+
+            eliminarPorExtension(ruta(), "txt");
+            eliminarPorExtension(ruta(), "html");
+
             return Response.status(Response.Status.OK).entity(json).build();
         } catch (Exception e) {
             return Response.status(Response.Status.BAD_REQUEST).entity(e.getMessage()).build();
-        } 
+        }
     }
-     
-    
-      //Metodo para eliminar todos los pdf 
+
+    //Metodo para eliminar todos los pdf 
     public static void eliminarPorExtension(String path, final String extension) {
         File[] archivos = new File(path).listFiles(new FileFilter() {
             public boolean accept(File archivo) {
@@ -209,8 +233,7 @@ public class ProductsResources {
             archivo.delete();
         }
     }
-    
-    
+
     @POST
     @Path("/BankStatementsFile")
     @Produces({MediaType.APPLICATION_JSON})
@@ -223,43 +246,41 @@ public class ProductsResources {
         int initialDelay = 1;
         int periodicDelay = 1;
         scheduler.scheduleAtFixedRate(task, initialDelay, periodicDelay,TimeUnit.SECONDS);*/
-        
-        
+
         JSONObject RequestData = new JSONObject(cadena);
         String fileId = "";
-        
+
         try {
             fileId = RequestData.getString("productBankStatementId");
         } catch (Exception e) {
             return Response.status(Response.Status.BAD_REQUEST).entity(e.getMessage()).build();
         }
-        JsonObject jsonMessage=new JsonObject();  
-        ProductsDAO dao=new ProductsDAO();
-        
-        if(!dao.actividad_horario()){
-            jsonMessage.put("ERROR","VERIFIQUE SU HORARIO DE ACTIVIDAD FECHA,HORA O CONTACTE A SU PROVEEEDOR");
-           return Response.status(Response.Status.BAD_REQUEST).entity(jsonMessage).build();
+        JsonObject jsonMessage = new JsonObject();
+        ProductsDAO dao = new ProductsDAO();
+
+        if (!dao.actividad_horario()) {
+            jsonMessage.put("ERROR", "VERIFIQUE SU HORARIO DE ACTIVIDAD FECHA,HORA O CONTACTE A SU PROVEEEDOR");
+            return Response.status(Response.Status.BAD_REQUEST).entity(jsonMessage).build();
         }
         try {
             String filePath = ruta() + fileId + ".pdf";
-            System.out.println("fiklePAth:"+filePath);
+            System.out.println("fiklePAth:" + filePath);
             File fileA = new File(filePath);
             if (fileA.exists()) {
                 byte[] input_file = Files.readAllBytes(Paths.get(filePath));
                 byte[] encodedBytesFile = Base64.getEncoder().encode(input_file);
                 String bytesFileId = new String(encodedBytesFile);
-                jsonMessage.put("productBankStatementFile",bytesFileId);
-                jsonMessage.put("productBankStatementFileName",fileId+".pdf");
-            }else{
-                jsonMessage.put("Error","EL ARCHIVO QUE INTENTA DESCARGAR NO EXISTE");
+                jsonMessage.put("productBankStatementFile", bytesFileId);
+                jsonMessage.put("productBankStatementFileName", fileId + ".pdf");
+            } else {
+                jsonMessage.put("Error", "EL ARCHIVO QUE INTENTA DESCARGAR NO EXISTE");
             }
-            
+
         } catch (Exception e) {
-            jsonMessage.put("Error",e.getMessage());
+            jsonMessage.put("Error", e.getMessage());
             return Response.status(Response.Status.BAD_REQUEST).entity(jsonMessage).build();
         }
 
-        
         return Response.status(Response.Status.OK).entity(jsonMessage).build();
     }
 

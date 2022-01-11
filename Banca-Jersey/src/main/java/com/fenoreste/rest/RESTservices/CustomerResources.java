@@ -49,7 +49,7 @@ public class CustomerResources {
           METODO PARA BUSCAR SOCIO CON BASE A DOCUMENTOS QUE SE TRAE EN EL REQUEST
     =================================================================================*/
     @POST
-    @Path("ByDocuments")
+    @Path("/ByDocuments")
     @Produces({MediaType.APPLICATION_JSON + ";charset=utf-8"})
     @Consumes({MediaType.APPLICATION_JSON + ";charset=utf-8"})
     public Response getClientsByDocument(String cadenaJson) throws Throwable {
@@ -77,7 +77,7 @@ public class CustomerResources {
             Persona persona = null;
             try {
                 //Buscamos a la persona con los datos que se esta enviando
-                persona = metodos.BuscarPersona(ClientType, DocumentId, Name, LastName, Mail, Phone, CellPhone);
+                persona = metodos.BuscarPersona(ClientType, DocumentId, Name, LastName, Mail,CellPhone);
                 
             } catch (Exception e) {
                 mensaje_error="Persona no existe";
@@ -108,7 +108,6 @@ public class CustomerResources {
                     return Response.status(Response.Status.OK).entity(JsonResponse_).build();
                 }
             } else {
-                System.out.println("Entro aqui");
                 JsonResponse_.put("Error", "SOCIO NO EXISTE,VERIFIQUE DATOS");
                 return Response.status(Response.Status.OK).entity(JsonResponse_).build();
             }
@@ -118,5 +117,25 @@ public class CustomerResources {
             JsonError_.put("Error", e.getMessage());
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(JsonError_).build();
         }
+    }
+    
+    
+    @POST
+    @Path("/notificaEstadoCuenta")
+    @Produces({MediaType.APPLICATION_JSON + ";charset=utf-8"})
+    @Consumes({MediaType.APPLICATION_JSON + ";charset=utf-8"})
+    public Response notificaEstadoCuenta(String cadenaJson){
+    JSONObject json_request = new JSONObject(cadenaJson);
+    CustomerDAO dao=new CustomerDAO();
+    String cuenta=json_request.getString("cuenta");
+    String estado = json_request.getString("estado");
+    String observaciones = json_request.getString("observaciones");
+    String empresa = json_request.getString("empresa");
+    
+    String mensaje_notificacion = dao.notificaCreacionCuenta(cuenta, estado, observaciones,empresa);
+    
+    JsonObject jsonResponse=new JsonObject();
+    jsonResponse.put("mensaje",mensaje_notificacion);       
+    return Response.ok(jsonResponse).build();
     }
 }

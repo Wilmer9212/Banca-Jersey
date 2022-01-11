@@ -65,6 +65,7 @@ public class TarjetaDeDebito {
                     + "         AND w.idproducto = ?"
                     + "         AND w.idauxiliar = ?"
                     + "          AND td.fecha_vencimiento > (select distinct fechatrabajo from origenes limit 1) ";
+            System.out.println("Consulta tarjeta:"+consulta);
             Query query = em.createNativeQuery(consulta, WsSiscoopFoliosTarjetas1.class);
             query.setParameter(1, idorigenp);
             query.setParameter(2, idproducto);
@@ -90,13 +91,13 @@ public class TarjetaDeDebito {
         WsSiscoopFoliosTarjetas1 tarjeta = em.find(WsSiscoopFoliosTarjetas1.class, foliosPK);
         try {
             System.out.println("Estatus de la tarjeta de debito:" + tarjeta.getActiva());
-            if (tarjeta.getActiva()) {
-                
-                response.setAvailableAmount(20000);                     
+            if (tarjeta.getActiva()) {                
+                /*
+                response.setAvailableAmount(200000);                     
                 response.setCode(1);
                 response.setDescription("activa");
-                
-             //response = conexionSiscoop().getSiscoop().getBalanceQuery(tarjeta.getIdtarjeta());
+                */  
+              response = conexionSiscoop().getSiscoop().getBalanceQuery(tarjeta.getIdtarjeta());
 
             } else {
                 response.setDescription("La tarjeta esta inactiva: " + tarjeta.getIdtarjeta());

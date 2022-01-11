@@ -37,7 +37,7 @@ public class JPAUtil {
             properties.put("javax.persistence.jdbc.url", "jdbc:postgresql://" + ip + ":5432/" + bd);
             properties.put("javax.persistence.jdbc.user", usuario);
             properties.put("javax.persistence.jdbc.password", pass);
-            Persistence.createEntityManagerFactory(PU, properties).close();
+            //Persistence.createEntityManagerFactory(PU, properties).close();
             return Persistence.createEntityManagerFactory(PU, properties).createEntityManager();
 
         } catch (Throwable e) {
