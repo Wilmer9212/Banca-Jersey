@@ -55,9 +55,7 @@ public abstract class FacadeCustomer<T> {
 
         } catch (Exception e) {
             System.out.println("Error leer socio:" + e.getMessage());
-            return client;
-        } finally {
-            em.close();
+            
         }
         return client;
     }
@@ -94,11 +92,8 @@ public abstract class FacadeCustomer<T> {
             Query query = em.createNativeQuery(consulta, Persona.class);
             persona = (Persona) query.getSingleResult();
         } catch (Exception e) {
-            System.out.println("Error al Buscar personas:" + e.getMessage());
-            return persona;
-        } finally {
-            em.close();
-        }
+            System.out.println("Error al Buscar personas:" + e.getMessage());          
+        } 
         return persona;
     }
 
@@ -208,9 +203,6 @@ public abstract class FacadeCustomer<T> {
         } catch (Exception e) {
             mensaje = "El usuario no tiene habilitado el producto para banca movil";
             System.out.println("Error en metodo para validar datos:" + e.getMessage());
-            return mensaje.toUpperCase();
-        } finally {
-            em.close();
         }
 
         return mensaje.toUpperCase();
@@ -219,6 +211,7 @@ public abstract class FacadeCustomer<T> {
     //Guardamos el usuario en la base de datos
     public boolean saveDatos(String username, Persona p) {
         EntityManager em = AbstractFacade.conexion();
+        boolean bandera = false;
         try {
             Banca_movil_usuarios userDB = new Banca_movil_usuarios();
             userDB.setPersonasPK(p.getPersonasPK());
@@ -245,14 +238,12 @@ public abstract class FacadeCustomer<T> {
             em.getTransaction().begin();
             em.merge(userDB);
             em.getTransaction().commit();
-            return true;
+            bandera = true;
             
         } catch (Exception e) {
             System.out.println("Error al persistir usuario:" + username + ":" + e.getMessage());
-            return false;
-        } finally {
-            em.close();
         }
+        return bandera;
     }
 
     public String notificaCreacionCuenta(String cuenta, String estado, String observacion, String empresa) {
@@ -361,9 +352,7 @@ public abstract class FacadeCustomer<T> {
             }
         } catch (Exception e) {
             System.out.println("Error al verificar el horario de actividad");
-        } finally {
-            em.close();
-        }
+        } 
         return bandera_;
     }
 

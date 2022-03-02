@@ -7,6 +7,7 @@ package com.fenoreste.rest.Util;
 
 import com.fenoreste.rest.entidades.Auxiliares;
 import com.fenoreste.rest.entidades.AuxiliaresPK;
+import com.fenoreste.rest.entidades.Origenes;
 import com.fenoreste.rest.entidades.Persona;
 import com.fenoreste.rest.entidades.PersonasPK;
 import com.fenoreste.rest.entidades.Tablas;
@@ -118,5 +119,21 @@ public class UtilidadesGenerales {
         return bandera_sopar;
 
     }
+    
+    public Origenes busquedaMatriz(){
+        EntityManager em = AbstractFacade.conexion();
+        Origenes origen_matriz = null;
+        try {
+            String sql = "SELECT * FROM origenes WHERE matriz=0";
+            Query query_sql = em.createNativeQuery(sql,Origenes.class);
+            origen_matriz = (Origenes) query_sql.getSingleResult();
+            
+        } catch (Exception e) {
+            System.out.println("Error al buscar la matriz:"+e.getMessage());
+        }
+        return origen_matriz;
+    }
+    
+    
 
 }

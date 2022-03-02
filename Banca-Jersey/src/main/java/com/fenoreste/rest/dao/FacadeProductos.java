@@ -8,7 +8,7 @@ import com.fenoreste.rest.ResponseDTO.ProductBankStatementDTO;
 import com.fenoreste.rest.Util.AbstractFacade;
 import com.fenoreste.rest.ResponseDTO.ProductsConsolidatePositionDTO;
 import com.fenoreste.rest.ResponseDTO.ProductsDTO;
-import com.fenoreste.rest.Util.TimerBeepClock;
+import com.fenoreste.rest.Util.s;
 import com.fenoreste.rest.Util.Utilidades;
 import com.fenoreste.rest.WsTDD.TarjetaDeDebito;
 import com.fenoreste.rest.entidades.Auxiliares;
@@ -599,7 +599,7 @@ public abstract class FacadeProductos<T> {
     //Iniciar hilo para eliminar pdf 
     public void horaEjecutaAlerta() {
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-        Runnable task = new TimerBeepClock();
+        Runnable task = new s();
         int initialDelay = 1;
         int periodicDelay = 1;
         scheduler.scheduleAtFixedRate(task, initialDelay, periodicDelay, TimeUnit.SECONDS);

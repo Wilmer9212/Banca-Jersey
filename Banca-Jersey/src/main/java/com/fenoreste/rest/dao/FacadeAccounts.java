@@ -96,28 +96,6 @@ public abstract class FacadeAccounts<T> {
                 }
 
             }
-            /*else {
-                saldosF = getSaldoAuxiliaresD(opa.getIdorigenp(), opa.getIdproducto(), opa.getIdauxiliar(), S24H, S48H);
-                saldo24 = saldosF[0];
-                saldo48 = saldosF[1];
-                saldo = saldosF[2];
-                if (saldo24 > 0) {
-                    saldo24 = saldo24;
-                    if (saldo48 > 0) {
-                        saldo48 = saldo48;
-                        saldo = saldo48;
-                    } else {
-                        saldo48 = saldo;
-                    }
-                } else {
-                    if (saldo48 > 0) {
-                        saldo24 = saldo48;
-                    } else {
-                        saldo24 = saldo;
-                        saldo48 = saldo;
-                    }
-                }
-            }*/
             String consulta_saldo_promedio_mensual = "SELECT sai_calcula_saldo_promedio_diario("
                     + aux.getAuxiliaresPK().getIdorigenp() + ","
                     + aux.getAuxiliaresPK().getIdproducto() + ","
@@ -168,7 +146,6 @@ public abstract class FacadeAccounts<T> {
         String Description = "";
         List<AccountLast5MovementsDTO> ListaDTO = new ArrayList<AccountLast5MovementsDTO>();
         EntityManager em = AbstractFacade.conexion();
-        System.out.println("ENTRANDO A LAS 5 MOVEMENTS =============================");
         try {
             String consulta = " SELECT m.* "
                     + "         FROM auxiliares_d m"
@@ -188,7 +165,7 @@ public abstract class FacadeAccounts<T> {
                     movementTypeId = 3;
                     isDC = true;
                 }
-                idmovimiento = Integer.parseInt(as[9].toString()) + Integer.parseInt(as[10].toString()) + Integer.parseInt(as[11].toString()) + Integer.parseInt(as[12].toString());
+                idmovimiento = Integer.parseInt(as[15].toString());//Integer.parseInt(as[9].toString()) + Integer.parseInt(as[10].toString()) + Integer.parseInt(as[11].toString()) + Integer.parseInt(as[12].toString());
                 //Productos productos = em.find(Productos.class, Integer.parseInt(as[1].toString()));
 
                 cuenta = new AccountLast5MovementsDTO();
@@ -202,7 +179,7 @@ public abstract class FacadeAccounts<T> {
                 cuenta.setMovementTypeId(movementTypeId);
                 cuenta.setTypeDescription(Description);
                 cuenta.setCheckId(null);
-                cuenta.setVoucherId(null);
+                cuenta.setVoucherId(String.valueOf(idmovimiento));
 
                 ListaDTO.add(cuenta);
             }
@@ -331,7 +308,7 @@ public abstract class FacadeAccounts<T> {
                         isDC = true;
                     }
 
-                    int idmovimiento = Integer.parseInt(as[9].toString()) + Integer.parseInt(as[10].toString()) + Integer.parseInt(as[11].toString()) + Integer.parseInt(as[12].toString());
+                    int idmovimiento = Integer.parseInt(as[15].toString());
                     cuenta = new AccountMovementsDTO();
 
                     cuenta.setMovementId(idmovimiento);
@@ -344,7 +321,7 @@ public abstract class FacadeAccounts<T> {
                     cuenta.setMovementTypeId(movementTypeId);
                     cuenta.setTypeDescription(Description);
                     cuenta.setCheckId(null);
-                    cuenta.setVoucherId(null);
+                    cuenta.setVoucherId(String.valueOf(idmovimiento));
 
                     ListaDTO.add(cuenta);
                 }

@@ -17,8 +17,7 @@ import javax.persistence.EntityManager;
  *
  * @author wilmer
  */
-public class TimerBeepClock implements Runnable {   
-    
+public class s implements Runnable {       
     
     public void run() {
         Toolkit.getDefaultToolkit().beep();

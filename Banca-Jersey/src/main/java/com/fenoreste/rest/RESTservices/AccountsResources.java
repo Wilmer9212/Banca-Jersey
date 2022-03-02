@@ -116,7 +116,7 @@ public class AccountsResources {
 
             List<AccountLast5MovementsDTO> cuentas = new ArrayList<AccountLast5MovementsDTO>();
             if (bandera) {
-                try {
+                
                     cuentas = metodos.getAccountLast5Movements(accountId);
                     if (cuentas.size() > 0) {
                         JsonObject cuentasJson = new JsonObject();
@@ -127,19 +127,15 @@ public class AccountsResources {
                         return Response.status(Response.Status.BAD_REQUEST).entity(Json_De_Error).build();
                     }
 
-                } catch (Exception e) {
-                    return null;
-                }
 
             } else {
                 Json_De_Error.put("Error", "CARACTERES INVALIDOS EN ENTRADA");
                 return Response.status(Response.Status.BAD_REQUEST).entity(Json_De_Error).build();
             }
         } catch (Exception e) {
-
             System.out.println("Error:" + e.getMessage());
+            return Response.status(Response.Status.BAD_REQUEST).entity(e.getMessage()).build();
         }
-        return null;
     }
 
     @POST

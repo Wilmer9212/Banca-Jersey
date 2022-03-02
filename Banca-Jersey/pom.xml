@@ -74,6 +74,12 @@
             <type>jar</type>
         </dependency>
         <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+            <version>5.3.10</version>
+            <type>jar</type>
+        </dependency>
+        <dependency>
         <groupId>javax</groupId>
         <artifactId>javaee-api</artifactId>
         <version>8.0</version>
@@ -124,6 +130,7 @@
                 <artifactId>javax.persistence</artifactId>
             </exclusion>
         </exclusions>
+      <type>jar</type>
     </dependency>
     
     <dependency>

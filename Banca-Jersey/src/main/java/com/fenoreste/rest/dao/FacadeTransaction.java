@@ -13,12 +13,14 @@ import com.fenoreste.rest.Request.RequestDataOrdenPagoDTO;
 import com.fenoreste.rest.ResponseDTO.BackendOperationResultDTO;
 import com.fenoreste.rest.ResponseDTO.ResponseSPEIDTO;
 import com.fenoreste.rest.ResponseDTO.TransactionToOwnAccountsDTO;
+import com.fenoreste.rest.ResponseDTO.VaucherDTO;
 import com.fenoreste.rest.Util.AbstractFacade;
 import com.fenoreste.rest.Util.Utilidades;
 import com.fenoreste.rest.WsTDD.TarjetaDeDebito;
-import static com.fenoreste.rest.dao.FacadeProductos.ruta;
 import com.fenoreste.rest.entidades.Auxiliares;
+import com.fenoreste.rest.entidades.AuxiliaresD;
 import com.fenoreste.rest.entidades.AuxiliaresPK;
+import com.fenoreste.rest.entidades.Origenes;
 import com.fenoreste.rest.entidades.Productos_bankingly;
 import com.fenoreste.rest.entidades.Procesa_pago_movimientos;
 import com.fenoreste.rest.entidades.Productos;
@@ -27,32 +29,39 @@ import com.fenoreste.rest.entidades.TablasPK;
 import com.fenoreste.rest.entidades.Transferencias;
 import com.fenoreste.rest.entidades.WsSiscoopFoliosTarjetas1;
 import com.fenoreste.rest.entidades.WsSiscoopFoliosTarjetasPK1;
-import com.itextpdf.text.Document;
-import com.itextpdf.text.Element;
-import com.itextpdf.text.Font;
-import com.itextpdf.text.Paragraph;
-import com.itextpdf.text.pdf.PdfWriter;
+import com.fenoreste.rest.service.IFuncionesService;
+import com.itextpdf.html2pdf.ConverterProperties;
+import com.itextpdf.html2pdf.HtmlConverter;
 import com.syc.ws.endpoint.siscoop.BalanceQueryResponseDto;
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.OutputStreamWriter;
 import java.math.BigDecimal;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
-import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import javax.persistence.EntityManager;
 import javax.persistence.Query;
 import org.json.JSONObject;
+
+import java.util.Base64;
 
 /**
  *
@@ -62,6 +71,7 @@ public abstract class FacadeTransaction<T> {
 
     Utilidades util = new Utilidades();
     UtilidadesGenerales util2 = new UtilidadesGenerales();
+    IFuncionesService funcionesService;
 
     public FacadeTransaction(Class<T> entityClass) {
     }
@@ -451,25 +461,22 @@ public abstract class FacadeTransaction<T> {
                     if (identificadorTransferencia != 5) {//Entran todos los tipos de transferencia excepto SPEI
                         //Si es desde la TDD(Aqui ya se leyo el ws de Alestra y esta levantado por eso trae la etiqueta de TDD)
                         if (backendResponse.getBackendMessage().contains("TDD")) {
-                            System.out.println("es desde TDD");
-                            System.out.println("Se esta buscando la tdd");
                             tarjeta_origen = new TarjetaDeDebito().buscaTarjetaTDD(opaOrigen.getIdorigenp(), opaOrigen.getIdproducto(), opaOrigen.getIdauxiliar(), em);
                             //Realizo un retiro de la TDD
                             bandera_retiro = new TarjetaDeDebito().retiroTDD(tarjeta_origen, procesaOrigen.getMonto());
-                            System.out.println("Se retiro de manera exitosa de la tdd");
+                            System.out.println("El retiro de la tdd fue:" + bandera_retiro);
                             //bandera_retiro = true;
                             if (bandera_retiro) {//si se retiro de la tdd origen                             
                                 if (identificadorTransferencia == 2) {
                                     //Si el destino tambien tdd
                                     if (backendResponse.getBackendMessage().contains("TERCERO")) {
-                                        System.out.println("Seguimos con tercero");
                                         //Busco el folio Destino                                       
                                         tarjeta_destino = new TarjetaDeDebito().buscaTarjetaTDD(opaD.getIdorigenp(), opaD.getIdproducto(), opaD.getIdauxiliar(), em);
-                                        System.out.println("La tarjeta destino esta activa:"+tarjeta_destino.getActiva());
+
                                         if (tarjeta_destino.getActiva()) {
                                             //Proceso un deposito al tercero TDD
                                             bandera_deposito_tercero = new TarjetaDeDebito().depositoTDD(tarjeta_destino, procesaOrigen.getMonto());
-                                            System.out.println("Es una tarjeta de debito el tercero");
+
                                             if (bandera_deposito_tercero) {
                                                 //Datos a procesar
                                                 try {
@@ -480,6 +487,7 @@ public abstract class FacadeTransaction<T> {
                                                     total_procesados = 0;
                                                     System.out.println("La funcion saicoop no pudo distribuir el capital");
                                                 }
+
                                                 if (total_procesados > 0) {
                                                     finish = true;
                                                 } else {
@@ -500,29 +508,26 @@ public abstract class FacadeTransaction<T> {
                                             bandera_deposito_origen = new TarjetaDeDebito().depositoTDD(tarjeta_origen, procesaOrigen.getMonto());
 
                                         }
-                                    } else {//Si el tercero no es TDD
+                                    } else {//Si el tercero no es TDD Terceros Tipo 
+                                        //Modificado el 27/01/2022
                                         //Datos a procesar
-                                        System.out.println("El tercero no es tdd");
-                                        try {
-                                            consulta_datos_procesar = "SELECT sai_bankingly_aplica_transaccion('" + fechaTr_.substring(0, 10) + "'," + procesaOrigen.getIdusuario() + ",'" + procesaOrigen.getSesion() + "','" + procesaOrigen.getReferencia() + "')";
-                                            procesa_movimiento = em.createNativeQuery(consulta_datos_procesar);
-                                            total_procesados = Integer.parseInt(String.valueOf(procesa_movimiento.getSingleResult()));
-                                        } catch (Exception e) {
-                                            total_procesados = 0;
-                                            System.out.println("La funcion saicoop no pudo distribuir el capital");
-                                        }
+                                        consulta_datos_procesar = "SELECT sai_bankingly_aplica_transaccion('" + fechaTr_.substring(0, 10) + "'," + procesaOrigen.getIdusuario() + ",'" + procesaOrigen.getSesion() + "','" + procesaOrigen.getReferencia() + "')";
+                                        //Proceso
+                                        procesa_movimiento = em.createNativeQuery(consulta_datos_procesar);
+                                        //Obtengo el total de procesados
+                                        total_procesados = Integer.parseInt(String.valueOf(procesa_movimiento.getSingleResult()));
+
                                         //Si la operacion se aplico de manera correcta lo dejamos asi es decir total de procesados mayor a 0
                                         if (total_procesados > 0) {
                                             finish = true;
                                         } else {
                                             //Si no se aplico el movimiento pero como ya se habia retirado de la TDD entonce se lo devolvemos
                                             bandera_deposito_origen = new TarjetaDeDebito().depositoTDD(tarjeta_origen, procesaOrigen.getMonto());
-                                            backendResponse.setBackendMessage("NO SE PUDIERON PROCESAR LOS MOVIMIENTOS EN SAICOOP");
+                                            backendResponse.setBackendMessage("NO SE PUDO PROCESAR FUNCION EN SAICOOP");
                                         }
-
                                     }
 
-                                } else {//Si no es Tercero(TodossssssssssssssssssssssssssssssssssssssssSS)ffffffffffffffffffffffffffffffffff tddd
+                                } else {//Transferencia a ahorros propios,Pagos propios y pagos Terceros
 
                                     //Verifico que el producto destino sea un prestamo 
                                     if (prDestino.getTipoproducto() == 2) {
@@ -537,7 +542,7 @@ public abstract class FacadeTransaction<T> {
                                                     + transaction.getAmount() + ",NULL)";
                                             Query query_se_puede_aplicar = em.createNativeQuery(si_se_puede_aplicar);
                                             Double se_puede_pagar = Double.parseDouble(String.valueOf(query_se_puede_aplicar.getSingleResult()));
-                                            System.out.println("SE puede pagar:"+se_puede_pagar);
+
                                             if (se_puede_pagar > 0) {
                                                 //Datos a procesar
                                                 try {
@@ -546,10 +551,15 @@ public abstract class FacadeTransaction<T> {
                                                     total_procesados = Integer.parseInt(String.valueOf(procesa_movimiento.getSingleResult()));
                                                 } catch (Exception e) {
                                                     total_procesados = 0;
-                                                    System.out.println("La funcion saicoop no pudo distribuir el capital:"+e.getMessage());
+                                                    System.out.println("La funcion saicoop no pudo distribuir el capital:" + e.getMessage());
                                                 }
 
                                                 if (total_procesados > 0) {
+                                                    if (procesaOrigen.getMonto() > se_puede_pagar) {
+                                                        double totalDevolver = procesaOrigen.getMonto() - se_puede_pagar;
+                                                        System.out.println("El total que se cubrio fue de:" + se_puede_pagar + " y se devolvio al producto un total de: " + totalDevolver);
+                                                        bandera_deposito_origen = new TarjetaDeDebito().depositoTDD(tarjeta_origen, totalDevolver);
+                                                    }
                                                     finish = true;
                                                 } else {
                                                     //Si no se aplico el movimiento pero como ya se habia retirado de la TDD entonce se lo devolvemos
@@ -558,24 +568,10 @@ public abstract class FacadeTransaction<T> {
                                                 }
 
                                             } else {
-                                                //Si no se aplico el movimiento pero como ya se habia retirado de la TDD entonce se lo devolvemos
-                                                //Si no se puede aplicar devolvemos el total que se puede abonar
-                                                String cuanto_permite_adelantar = "SELECT sai_bankingly_prestamo_cuanto("
-                                                        + aDestino.getAuxiliaresPK().getIdorigenp() + ","
-                                                        + aDestino.getAuxiliaresPK().getIdproducto() + ","
-                                                        + aDestino.getAuxiliaresPK().getIdauxiliar() + ","
-                                                        + "(SELECT date(fechatrabajo) FROM origenes limit 1),"
-                                                        + aDestino.getTipoamortizacion() + ","
-                                                        + "NULL)";
-                                                System.out.println("Permite adelantar:" + cuanto_permite_adelantar);
-                                                Query adelanto = em.createNativeQuery(cuanto_permite_adelantar);
-                                                String cuanto_adelantamo = adelanto.getSingleResult().toString();
-                                                System.out.println("sai_adelanto:" + cuanto_adelantamo);
-                                                String[] partes_cuanto = cuanto_adelantamo.split("\\|");
-                                                List list = Arrays.asList(partes_cuanto);
+                                                //Si no se aplico el movimiento pero como ya se habia retirado de la TDD entonce se lo devolvemos                                                
                                                 bandera_deposito_origen = new TarjetaDeDebito().depositoTDD(tarjeta_origen, procesaOrigen.getMonto());
                                                 backendResponse.setBackendMessage("MONTO ES MENOR A LO QUE SE PERMITE ADELANTAR \n"
-                                                        + "ADELANTO PERMITIDO:" + list.get(0) + "\n"
+                                                        + "ADELANTO PERMITIDO:" + se_puede_pagar + "\n"
                                                         + "PRDUCTO ESQUEMA HIPOTECARIO");
                                             }
                                         } else {//Si es prestamo creciente
@@ -650,7 +646,7 @@ public abstract class FacadeTransaction<T> {
                                         }
                                     }
 
-                                } else {
+                                } else {//Si el tercero no es TDD ojo aqui no entran prestamos
                                     consulta_datos_procesar = "SELECT sai_bankingly_aplica_transaccion('" + fechaTr_.substring(0, 10) + "'," + procesaOrigen.getIdusuario() + ",'" + procesaOrigen.getSesion() + "','" + procesaOrigen.getReferencia() + "')";
                                     Query procesa_pago = em.createNativeQuery(consulta_datos_procesar);
                                     total_procesados = Integer.parseInt(String.valueOf(procesa_pago.getSingleResult()));
@@ -659,14 +655,13 @@ public abstract class FacadeTransaction<T> {
                                     }
                                 }
 
-                            } else {
-                                //Verifico que el producto destino sea un prestamo 
+                            } else {//Verifico que el producto destino sea un prestamo 
                                 if (prDestino.getTipoproducto() == 2) {
                                     //Busco el tipo el tipo de amortizacion
 
                                     if (aDestino.getTipoamortizacion() == 5) {
                                         //Datos a procesar
-                                        try {  
+                                        try {
                                             consulta_datos_procesar = "SELECT sai_bankingly_aplica_transaccion('" + fechaTr_.substring(0, 10) + "'," + procesaOrigen.getIdusuario() + ",'" + procesaOrigen.getSesion() + "','" + procesaOrigen.getReferencia() + "')";
                                             procesa_movimiento = em.createNativeQuery(consulta_datos_procesar);
                                             total_procesados = Integer.parseInt(String.valueOf(procesa_movimiento.getSingleResult()));
@@ -674,14 +669,29 @@ public abstract class FacadeTransaction<T> {
                                             total_procesados = 0;
                                         }
 
+                                        String si_se_puede_aplicar = "select sai_bankingly_limite_adelanto (" + aDestino.getAuxiliaresPK().getIdorigenp() + ","
+                                                + "" + aDestino.getAuxiliaresPK().getIdproducto() + ","
+                                                + "" + aDestino.getAuxiliaresPK().getIdauxiliar() + ","
+                                                + "(SELECT date(fechatrabajo) FROM origenes limit 1),"
+                                                + transaction.getAmount() + ",NULL)";
+                                        Query query_se_puede_aplicar = em.createNativeQuery(si_se_puede_aplicar);
+                                        Double se_puede_pagar = Double.parseDouble(String.valueOf(query_se_puede_aplicar.getSingleResult()));
+
                                         if (total_procesados > 0) {
+                                            if (procesaOrigen.getMonto() > se_puede_pagar) {
+                                                double totalDevolver = procesaOrigen.getMonto() - se_puede_pagar;
+                                                double modificar = aOrigen.getSaldo().doubleValue() + totalDevolver;
+                                                System.out.println("Se aplico al prestamo un total de :" + se_puede_pagar + " se devolvio al producto un total de:" + totalDevolver);
+                                                em.getTransaction().begin();
+                                                int v = em.createNativeQuery("UPDATE auxiliares SET saldo=" + modificar + " WHERE idorigenp=" + opaOrigen.getIdorigenp() + " AND idproducto=" + opaOrigen.getIdproducto() + " AND idauxiliar=" + opaOrigen.getIdauxiliar()).executeUpdate();
+                                                em.getTransaction().commit();
+                                            }
                                             finish = true;
                                         } else {
                                             //Si no se aplico el movimiento pero como ya se habia retirado de la TDD entonce se lo devolvemos
                                             backendResponse.setBackendMessage("NO SE PUDO PROCESAR FUNCION EN SAICOOP");
                                         }
                                     } else {//Si es prestamo creciente
-                                         ///////////////////////7sfsmdfnsdmfdnsfdsjjjjjjjjjjjjjjjjffffffffffffffffffffffffffffffffffffffffffffffffffffffffffdfsfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffsffsfsssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssd
                                         //Datos a procesar
                                         consulta_datos_procesar = "SELECT sai_bankingly_aplica_transaccion('" + fechaTr_.substring(0, 10) + "'," + procesaOrigen.getIdusuario() + ",'" + procesaOrigen.getSesion() + "','" + procesaOrigen.getReferencia() + "')";
                                         //Proceso
@@ -720,12 +730,11 @@ public abstract class FacadeTransaction<T> {
                         if (bandera_retiro) {
                             try {
                                 consulta_datos_procesar = "SELECT sai_bankingly_aplica_transaccion('" + fechaTr_.substring(0, 10) + "'," + procesaOrigen.getIdusuario() + ",'" + procesaOrigen.getSesion() + "','" + procesaOrigen.getReferencia() + "')";
-                               procesa_movimiento = em.createNativeQuery(consulta_datos_procesar);
+                                procesa_movimiento = em.createNativeQuery(consulta_datos_procesar);
                                 total_procesados = Integer.parseInt(String.valueOf(procesa_movimiento.getSingleResult()));
                             } catch (Exception e) {
-                                System.out.println("Error al procesar datos en SAICOOP por funcion :"+ e.getMessage());
+                                System.out.println("Error al procesar datos en SAICOOP por funcion :" + e.getMessage());
                             }
-
                             if (total_procesados > 0) {
                                 mensajeBackendResult = "ORDEN ENVIADA CON EXITO,COSTO DE LA TRANSACCION:" + tota_comision;//+(Double.parseDouble(tb_spei_cuenta_comisiones.getDato2())+(Double.parseDouble(tb_spei_cuenta_comisiones.getDato2())*0.16));
                                 clean = true;
@@ -758,7 +767,6 @@ public abstract class FacadeTransaction<T> {
                         backendResponse.setBackendMessage("NO SE APLICO EL MOVIMIENTO FALLA AL PROCESAR MOVIMIENTOS EN SAICOOP");
                     }
                 }
-                System.out.println("Se aplico el movimiento siiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii");
                 if (finish) {
                     if (identificadorTransferencia != 5) {
                         //Si fue un pago a prestamo propio o de Tercero
@@ -775,15 +783,15 @@ public abstract class FacadeTransaction<T> {
                             //Mensaje personalizado para CSN
                             if (banderaCSN) {
                                 System.out.println("Mostrando detalles de lo aplicado");
-                                System.out.println("Seguro hipotecario:"+ArrayDistribucion[0]);
+                                System.out.println("Seguro hipotecario:" + ArrayDistribucion[0]);
                                 System.out.println("COMISIÓN COBRANZA:" + ArrayDistribucion[1]);
-                                  System.out.println("INTERES MORATORIO:" + ArrayDistribucion[2]);
-                                 System.out.println("IVA INTERES MORATORIO :" + ArrayDistribucion[3]);
-                                  System.out.println("INTERES ORDINARIO     :" + ArrayDistribucion[4]);
-                                  System.out.println("IVA INTERES ORDINARIO :" + ArrayDistribucion[5]);
-                                  System.out.println("CAPITAL               :" + ArrayDistribucion[6]);
-                                System.out.println("ADELANTO DE INTERES :" + ArrayDistribucion[7] );
-                                
+                                System.out.println("INTERES MORATORIO:" + ArrayDistribucion[2]);
+                                System.out.println("IVA INTERES MORATORIO :" + ArrayDistribucion[3]);
+                                System.out.println("INTERES ORDINARIO     :" + ArrayDistribucion[4]);
+                                System.out.println("IVA INTERES ORDINARIO :" + ArrayDistribucion[5]);
+                                System.out.println("CAPITAL               :" + ArrayDistribucion[6]);
+                                System.out.println("ADELANTO DE INTERES :" + ArrayDistribucion[7]);
+
                                 mensajeBackendResult = "<html>"
                                         + "<body>"
                                         + "<h1><center>PAGO EXITOSO</center></h1>"
@@ -951,33 +959,29 @@ public abstract class FacadeTransaction<T> {
         return backendResponse;
     }
 
-    public String voucherFileCreate(String idtransaccion) {
-        EntityManager em = AbstractFacade.conexion();
+    public VaucherDTO vaucher(String idtransaccion) {
+        VaucherDTO voucher = new VaucherDTO();
         try {
-            String cosulta = "SELECT * FROM transferencias_bankingly WHERE transactionid='" + idtransaccion + "'";
-            System.out.println("aqui:" + cosulta);
-            Query query = em.createNativeQuery(cosulta, Transferencias.class);
-            Transferencias transferencia = (Transferencias) query.getSingleResult();
-            OgsDTO ogs = util.ogs(transferencia.getClientbankidentifier());
-            Query nombreMatriz = em.createNativeQuery("SELECT nombre FROM origenes WHERE matriz=0");
-            String nombre = String.valueOf(nombreMatriz.getSingleResult());
-            String bProp = "SELECT nombre||' '||appaterno||' '||apmaterno FROM personas WHERE idorigen=" + ogs.getIdorigen() + " AND idgrupo=" + ogs.getIdgrupo() + " AND idsocio=" + ogs.getIdsocio();
-            Query prop = em.createNativeQuery(bProp);
-            String propietario = String.valueOf(prop.getSingleResult());
-            String vouch = voucher(String.valueOf(transferencia.getTransactionid()),
-                    transferencia.getValuedate(),
-                    transferencia.getDebitproductbankidentifier(),
-                    String.valueOf(transferencia.getAmount()),
-                    nombre,
-                    propietario, transferencia.getDescription());
-            return vouch;
+            System.out.println("LLEgo");
+            String busqueda_Auxiliar = "SELECT * FROM auxiliares_d WHERE transaccion=" + idtransaccion;
+            Query busqueda_aux = AbstractFacade.conexion().createNativeQuery(busqueda_Auxiliar, AuxiliaresD.class);
+            AuxiliaresD ad = (AuxiliaresD) busqueda_aux.getSingleResult();
+            System.out.println("Auxiliar d:" + ad);
+            File file_html = construirHtmlVoucher(ad);
 
+            if (crearPDF(ruta(), file_html.getName())) {
+                String rutpdf = ruta() + file_html.getName().replace(".html", ".pdf");
+                byte[] input_file = Files.readAllBytes(Paths.get(rutpdf));
+                byte[] encodedBytesFile = Base64.getEncoder().encode(input_file);
+                String bytesFileId = new String(encodedBytesFile);
+                voucher.setProductBankStatementFileName(file_html.getName().replace(".html", ".pdf"));
+                voucher.setProductBankStatementFile(bytesFileId);
+                file_html.delete();
+            }
         } catch (Exception e) {
-            System.out.println("Error al crear voucher:" + e.getMessage());
-            return "";
-        } finally {
-            em.close();
+            System.out.println("Error al formar el vaucher:" + e.getMessage());
         }
+        return voucher;
 
     }
 
@@ -1384,7 +1388,7 @@ public abstract class FacadeTransaction<T> {
                                                                                     }
 
                                                                                     if (!Bandera_180) {
-                                                                                        message =  message +" VALIDADO CON EXITO";
+                                                                                        message = message + " VALIDADO CON EXITO";
                                                                                     } else {
                                                                                         message = "VERIFIQUE EL GRUPO DE SOCIO";
                                                                                     }
@@ -1512,7 +1516,7 @@ public abstract class FacadeTransaction<T> {
             if (bOrigen) {
 
                 Double saldo = Double.parseDouble(ctaOrigen.getSaldo().toString());
-
+                System.out.println("Saldo:" + saldo);
                 if (util2.obtenerOrigen(em) == 30200) {
                     Tablas tablaProductoTDD = new TarjetaDeDebito().productoTddwebservice(em);
                     //Si el pago del prestamo se esta haciendo desde la TDD
@@ -1584,12 +1588,22 @@ public abstract class FacadeTransaction<T> {
                                             //Valido que el producto destino tercero sea un prestamo
                                             if (productoDestino.getTipoproducto() == 2) {
 
-
                                                 //valido el minimo o maximo para banca movil
                                                 /*if (minMax(monto).toUpperCase().contains("VALIDO")) {
                                                     //Valido el monto maximo por dia
                                                     if (MaxPordia(opaOrigen, monto)) {
-                                                 */ if (monto <= Double.parseDouble(ctaDestino.getSaldo().toString())) {
+                                                 */
+                                                Origenes origenMatriz = util2.busquedaMatriz();
+                                                SimpleDateFormat sdf = new SimpleDateFormat("yyyy/MM/dd");
+                                                String fecha_intento_liquidar = sdf.format(origenMatriz.getFechatrabajo());
+                                                String sql_monto_liquidar = "SELECT monto_para_liquidar_prestamo(" + opaD.getIdorigenp() + ","
+                                                        + opaD.getIdproducto() + ","
+                                                        + opaD.getIdauxiliar() + ","
+                                                        + "'" + fecha_intento_liquidar + "')";
+                                                Query query_monto_liquidacion = em.createNativeQuery(sql_monto_liquidar);
+                                                double monto_liquidacion = Double.parseDouble(String.valueOf(query_monto_liquidacion.getSingleResult()));
+                                                System.out.println("El monto de liquidacion es :" + monto_liquidacion);
+                                                if (monto <= monto_liquidacion) {
                                                     if (monto > 0) {
                                                         /*=======================REGLAS DE NEGOCIO==================================*/
                                                         //Valido que la cuenta origen para CSN esta un grupo de retiro configurado
@@ -1952,6 +1966,7 @@ public abstract class FacadeTransaction<T> {
         Procesa_pago_movimientos pago = null;
         String mensaje = "";
         String cliente = "";
+        boolean cancela = false;
         try {
             //Lo utlizon para los datos a procesar 
             long time = System.currentTimeMillis();
@@ -1969,86 +1984,110 @@ public abstract class FacadeTransaction<T> {
             String referencia = String.valueOf(rn) + "" + String.valueOf(3) + String.valueOf(1) + "" + fReal.replace("/", "");
             int rechazo = 0;
             int a_rechazar = 0;
+            boolean existe = false;
+            boolean rechazos = false;
+
             try {
                 String busqueda = "SELECT count(*) FROM bankingly_movimientos_spei WHERE idorden_spei=" + idorden;
                 Query query_cancelados_ = em.createNativeQuery(busqueda);
                 a_rechazar = Integer.parseInt(String.valueOf(query_cancelados_.getSingleResult()));
                 if (a_rechazar > 0) {
-                    mensaje = "RECIBIDO";
-                } else {
-                    mensaje = "ORDEN NO EXISTE";
+                    existe = true;
                 }
             } catch (Exception e) {
+                System.out.println("Error al buscar registros de spei para rechazar:" + e.getMessage());
+            }
+
+            if (existe) {
+                if (!estado.toUpperCase().contains("LIQUIDA")) {
+                    //Extraigo registros de bankingly_movimientos_spei para moverlos a bankingly_movimientos_ca(Todo lo realiza la funcion)
+                    String consulta_retroceso_spei = "SELECT sai_bankingly_spei_rechazado(" + idorden + ",'" + sesionc + "','" + referencia + "')";
+                    Query query_retroceso = em.createNativeQuery(consulta_retroceso_spei);
+                    rechazo = Integer.parseInt(String.valueOf(query_retroceso.getSingleResult()));
+                    if (rechazo > 0) {//Si se movio el registro de manera exitosa
+                        rechazos = true;
+                    } else {
+                        mensaje = "NO SE PUDIERON PREPARAR LOS REGISTROS A RECHAZAR";
+                    }
+                } else {//Si ya se aplico solo limpio registros
+                    em.getTransaction().begin();
+                    //limpio registros
+                    em.createNativeQuery("DELETE FROM bankingly_movimientos_spei WHERE idorden_spei=" + idorden).executeUpdate();
+                    em.getTransaction().commit();
+                }
+            } else {
                 mensaje = "ORDEN NO EXISTE";
             }
 
-            if (!estado.toUpperCase().contains("LIQUIDA")) {
-                String consulta_retroceso_spei = "SELECT sai_bankingly_spei_rechazado(" + idorden + ",'" + sesionc + "','" + referencia + "')";
-                System.out.println("consulta retroceso spei:" + consulta_retroceso_spei);
-                Query query_retroceso = em.createNativeQuery(consulta_retroceso_spei);
-                rechazo = Integer.parseInt(String.valueOf(query_retroceso.getSingleResult()));
-            }
-
-            if (rechazo > 0) {
+            if (rechazos) {
                 String consulta_lista_objetos = "SELECT * FROM bankingly_movimientos_ca WHERE idorden_spei=" + idorden + " AND cargoabono=1 LIMIT 1";
                 Query query_lista_objetos = em.createNativeQuery(consulta_lista_objetos, Procesa_pago_movimientos.class);
                 pago = (Procesa_pago_movimientos) query_lista_objetos.getSingleResult();
+                //Solo consulto 1 registro de los 3 que se generan porque solo saco el ogs
                 cliente = String.format("%06d", pago.getIdorigen()) + "" + String.format("%02d", pago.getIdgrupo()) + String.format("%06d", pago.getIdsocio());
-                mensaje = "EXITO A CANCELAR";
+                cancela = true;
             }
 
         } catch (Exception e) {
-            mensaje = "ORDEN NO EXISTE";
+            System.out.println("Error que se produjo al intentar actualizar estatus de orden:" + idorden + " es:" + e.getMessage());
         }
+
         PreparaSMS envio_sms = new PreparaSMS();
-        if (mensaje.toUpperCase().contains("EXITO")) {
+        if (cancela) {
             try {
                 if (!estado.toUpperCase().contains("LIQUIDA")) {
                     WsSiscoopFoliosTarjetas1 tarjeta_origen = new TarjetaDeDebito().buscaTarjetaTDD(pago.getAuxiliaresPK().getIdorigenp(), pago.getAuxiliaresPK().getIdproducto(), pago.getAuxiliaresPK().getIdauxiliar(), em);
-                    //Retiramos de la TDD origen
-                    Query procesa_movimiento = null;
-                    try {
-                        String consulta_datos_procesar = "SELECT sai_bankingly_aplica_transaccion('" + pago.getFecha().toString().substring(0, 10) + "'," + pago.getIdusuario() + ",'" + pago.getSesion() + "','" + pago.getReferencia() + "')";
-                        procesa_movimiento = em.createNativeQuery(consulta_datos_procesar);
-                    } catch (Exception e) {
-                        System.out.println("Error:" + e.getMessage());
-                    }
-                    System.out.println("Pago total a devolvewr:" + pago.getMonto());
+                    int total_procesados = 0;
+                    //Ajustamos el saldo de la TDD origen lo que se ya se retiro
+                    System.out.println("Ajuste por:" + pago.getMonto());
                     boolean bandera_deposito = new TarjetaDeDebito().depositoTDD(tarjeta_origen, pago.getMonto());
                     //bandera_deposito=true;
-                    //si el retiro se efectuo
-                    //Enviamos la orden SPEI 
-                    int total_procesados = Integer.parseInt(String.valueOf(procesa_movimiento.getSingleResult()));
                     if (bandera_deposito) {
-                        //Si la operacion se aplico de manera corracta lo dejamos asi
-                        // String cliente = String.format("%06d", pago.getIdorigen()) + "" + String.format("%02d", pago.getIdgrupo()) + String.format("%06d", pago.getIdsocio());
+                        try {
+                            String consulta_datos_procesar = "SELECT sai_bankingly_aplica_transaccion('" + pago.getFecha().toString().substring(0, 10) + "'," + pago.getIdusuario() + ",'" + pago.getSesion() + "','" + pago.getReferencia() + "')";
+                            Query procesa_movimiento = em.createNativeQuery(consulta_datos_procesar);
+                            total_procesados = Integer.parseInt(String.valueOf(procesa_movimiento.getSingleResult()));
+                        } catch (Exception e) {
+                            System.out.println("Error al aplicar la transaccion en saicoop:"+e.getMessage());
+                        }
+
                         if (total_procesados > 0) {
-                            //Aqui se envia el sms
-                            System.out.println("entro a enviar sms SPEI salida");
                             String consulta_termina_transaccion = "SELECT sai_bankingly_termina_transaccion('" + pago.getFecha().toString().substring(0, 10) + "'," + pago.getIdusuario() + ",'" + pago.getSesion() + "','" + pago.getReferencia() + "')";
                             Query termina_transaccion = em.createNativeQuery(consulta_termina_transaccion);
 
                             int registros_limpiados = Integer.parseInt(String.valueOf(termina_transaccion.getSingleResult()));
                             System.out.println("Registros Limpiados con exito:" + registros_limpiados);
 
-                            //Enviamos datos a preparar el sms indicando que debe obtener datos de mensaje a cuenta propia
-                            mensaje = "ORDEN SE A COMPLETADO EXITOSAMENTE";
+                            em.getTransaction().begin();
+                            //limpio registros
+                            em.createNativeQuery("DELETE FROM bankingly_movimientos_spei WHERE idorden_spei=" + idorden).executeUpdate();
+                            em.getTransaction().commit();
 
+                            //Enviamos datos a preparar el sms indicando que debe obtener datos de mensaje a cuenta propia
+                            mensaje = "recibido";
+                            String envio_ok_sms = envio_sms.enviaSMSOrdenSpei(em, cliente, idorden, folio, estado, causadevolucion);
+                        } else {
+                            System.out.println("Falo el al generar poliza en csn pero fue recibido");
+                            mensaje = "recibido";
                         }
+
                     } else {
-                        mensaje = "Recibido";//NO SE PUDO DEPOSITAR A LA TARJETA DE DEBITO";
-                        estado = "cancelado, pero ocurrio un error al generar poliza de reverso contacta a CSN";
+                        mensaje = "Error al procesar el ajuste por ws Alestra tdd";//NO SE PUDO DEPOSITAR A LA TARJETA DE DEBITO";
+                        em.getTransaction().begin();
+                            //limpio registros
+                        em.createNativeQuery("DELETE FROM bankingly_movimientos_ca WHERE idorden_spei=" + idorden).executeUpdate();
+                        em.getTransaction().commit();
                     }
+
                 }
 
             } catch (Exception e) {
                 System.out.println("Error al procesar salida SPEI :" + e.getMessage());
                 mensaje = e.getMessage();
             }
-            String envio_ok_sms = envio_sms.enviaSMSOrdenSpei(em, cliente, idorden, folio, estado, causadevolucion);
+            
 
         }
-
         return mensaje.toLowerCase();
 
     }
@@ -2075,82 +2114,6 @@ public abstract class FacadeTransaction<T> {
             em.close();
         }
         return mensaje;
-    }
-
-    public String voucher(String idtransaccion, String fecha, String cuenta, String monto, String caja, String propietario, String comentario) {
-
-        try {
-            Document document = new Document();
-            PdfWriter.getInstance(document, new FileOutputStream(ruta() + "vo" + idtransaccion + cuenta + ".pdf"));
-            document.open();
-            // Left
-            Paragraph paragraph1 = new Paragraph(caja);
-            paragraph1.setAlignment(Element.ALIGN_CENTER);
-
-            Font fuente = new Font();
-            fuente.setSize(2);
-            fuente.setStyle(Font.BOLD);
-            paragraph1.setSpacingBefore(20);
-
-            paragraph1.setFont(fuente);
-            document.add(paragraph1);
-
-            Paragraph paragraph2 = new Paragraph(
-                    "No.Transferencia:" + idtransaccion + "\n"
-                    + "Fecha:" + fecha + "\n"
-                    + "Cuenta:" + cuenta + "\n"
-                    + "Monto operacion:" + monto + "\n"
-                    + "Propietario cuenta:" + propietario + "\n"
-                    + "Motivo tranferencia:" + comentario
-            );
-            paragraph2.setSpacingBefore(20);
-            paragraph2.setAlignment(Element.ALIGN_LEFT);
-            document.add(paragraph2);
-            document.close();
-            return ruta() + "vo" + idtransaccion + cuenta + ".pdf";
-        } catch (Exception e) {
-            System.out.println("Error al crear voucher:" + e.getMessage());
-            e.printStackTrace();
-            return "";
-        }
-    }
-
-    //Valida el monto maximo permitido por dia
-    public boolean MaxPordia(String opa, Double montoI) {
-        EntityManager em = AbstractFacade.conexion();
-        Calendar c1 = Calendar.getInstance();
-        String dia = Integer.toString(c1.get(5));
-        String mes = Integer.toString(c1.get(2) + 1);
-        String annio = Integer.toString(c1.get(1));
-        String fechaActual = String.format("%04d", Integer.parseInt(annio)) + "/" + String.format("%02d", Integer.parseInt(mes)) + "/" + String.format("%02d", Integer.parseInt(dia));
-        TablasPK tbPk = new TablasPK("bankingly_banca_movil", "montomaximo");
-        Tablas tb = em.find(Tablas.class,
-                tbPk);
-        try {
-            //Busco el total de monto de transferencias por dia
-            String consultaTransferencias = "SELECT sum(amount) FROM transferencias_bankingly WHERE"
-                    + " debitproductbankidentifier='" + opa + "' AND to_char(date(fechaejecucion),'yyyy/MM/dd')='" + fechaActual + "'";
-            Query query = em.createNativeQuery(consultaTransferencias);
-            String montoObtenidodb = "";
-            if (query.getSingleResult() != null) {
-                montoObtenidodb = String.valueOf(query.getSingleResult());
-            } else {
-                montoObtenidodb = "0";
-            }
-            Double monto = Double.parseDouble(String.valueOf(montoObtenidodb)) + montoI;
-            System.out.println("monto:" + monto);
-            if (monto <= Double.parseDouble(tb.getDato1())) {
-                return true;
-            } else {
-                return false;
-            }
-        } catch (Exception e) {
-
-            System.out.println("Error al validar permitido diario:" + e.getMessage());
-        } finally {
-            em.close();
-        }
-        return false;
     }
 
     // REALIZA UN PING A LA URL DEL WSDL
@@ -2276,7 +2239,7 @@ public abstract class FacadeTransaction<T> {
                                             String fecha_trabajo = String.valueOf(query_fecha_trabajo.getSingleResult());
                                             Tablas tb_precio_udi_periodo = util2.busquedaTabla(em, "valor_udi", fecha_trabajo.substring(0, 6));
                                             Tablas tb_udis_permitido_tercero = util2.busquedaTabla(em, "bankingly_banca_movil", "max_udis_por_transferencia");//fecha_trabajo.substring(0, 7).replace("\\/", ""));
-                                             if (transactionOWN.getAmount() <= (Double.parseDouble(tb_precio_udi_periodo.getDato1()) * Double.parseDouble(tb_udis_permitido_tercero.getDato1()))) {
+                                            if (transactionOWN.getAmount() <= (Double.parseDouble(tb_precio_udi_periodo.getDato1()) * Double.parseDouble(tb_udis_permitido_tercero.getDato1()))) {
                                                 mensaje = validarPagoAPrestamos(identificadorTransferencia, transactionOWN.getDebitProductBankIdentifier(),
                                                         transactionOWN.getAmount(),
                                                         transactionOWN.getCreditProductBankIdentifier(),
@@ -2298,27 +2261,27 @@ public abstract class FacadeTransaction<T> {
                                         String fecha_trabajo = String.valueOf(query_fecha_trabajo.getSingleResult());
                                         Tablas tb_precio_udi_periodo = util2.busquedaTabla(em, "valor_udi", fecha_trabajo.substring(0, 6));
                                         Tablas tb_udis_permitido_tercero = util2.busquedaTabla(em, "bankingly_banca_movil", "max_udis_por_transferencia");//fecha_trabajo.substring(0, 7).replace("\\/", ""));
-                                         if (transactionOWN.getAmount() <= (Double.parseDouble(tb_precio_udi_periodo.getDato1()) * Double.parseDouble(tb_udis_permitido_tercero.getDato1()))) {
+                                        if (transactionOWN.getAmount() <= (Double.parseDouble(tb_precio_udi_periodo.getDato1()) * Double.parseDouble(tb_udis_permitido_tercero.getDato1()))) {
                                             //Validaremos el monto de transaccion acumulada mensual
-                                            String consulta_movs = "SELECT (CASE WHEN sum(amount::numeric) > 0 THEN sum(amount::numeric) ELSE 0 END) FROM transferencias_bankingly WHERE clientbankidentifier='"+transactionOWN.getClientBankIdentifier()+
-                                                                   "' AND subtransactiontypeid='3' AND transactiontypeid='1' AND to_char(fechaejecucion,'yyyymmdd')='"+fecha_trabajo+"'";
+                                            String consulta_movs = "SELECT (CASE WHEN sum(amount::numeric) > 0 THEN sum(amount::numeric) ELSE 0 END) FROM transferencias_bankingly WHERE clientbankidentifier='" + transactionOWN.getClientBankIdentifier()
+                                                    + "' AND subtransactiontypeid='3' AND transactiontypeid='1' AND to_char(fechaejecucion,'yyyymmdd')='" + fecha_trabajo + "'";
                                             double total_acumulado_mes = 0.0;
                                             double maximo_perimitido_mes = 0.0;
-                                             try {
-                                                 Query query_calculo_monto_mensual = em.createNativeQuery(consulta_movs);
-                                                 Double total_en_el_mes = Double.parseDouble(String.valueOf(query_calculo_monto_mensual.getSingleResult()));
-                                                 //Ahora buscamos la tabla donde esta parametrizado el maximo por mes
-                                                 Tablas tb_maximo_mxn_mes = util2.busquedaTabla(em,"bankingly_banca_movil","max_mxn_mensual");      
-                                                 total_acumulado_mes = total_en_el_mes;
-                                                 maximo_perimitido_mes =Double.parseDouble(tb_maximo_mxn_mes.getDato1());
-                                             } catch (Exception e) {
-                                                 System.out.println("Error al buscar maximo en el mes:"+e.getMessage());
-                                             }
-                                             if((total_acumulado_mes + transactionOWN.getAmount())<= maximo_perimitido_mes){
-                                                 mensaje = validaOrdenSPEI(SPEIOrden);
-                                             }else{
+                                            try {
+                                                Query query_calculo_monto_mensual = em.createNativeQuery(consulta_movs);
+                                                Double total_en_el_mes = Double.parseDouble(String.valueOf(query_calculo_monto_mensual.getSingleResult()));
+                                                //Ahora buscamos la tabla donde esta parametrizado el maximo por mes
+                                                Tablas tb_maximo_mxn_mes = util2.busquedaTabla(em, "bankingly_banca_movil", "max_mxn_mensual");
+                                                total_acumulado_mes = total_en_el_mes;
+                                                maximo_perimitido_mes = Double.parseDouble(tb_maximo_mxn_mes.getDato1());
+                                            } catch (Exception e) {
+                                                System.out.println("Error al buscar maximo en el mes:" + e.getMessage());
+                                            }
+                                            if ((total_acumulado_mes + transactionOWN.getAmount()) <= maximo_perimitido_mes) {
+                                                mensaje = validaOrdenSPEI(SPEIOrden);
+                                            } else {
                                                 mensaje = "El monto de su transferencia spei traspasa el permitido por mes";
-                                             }
+                                            }
                                         } else {
                                             mensaje = "El monto de su transferencia traspasa el permitido a transferencia tercero";
                                         }
@@ -2369,7 +2332,7 @@ public abstract class FacadeTransaction<T> {
                                 String fecha_trabajo = String.valueOf(query_fecha_trabajo.getSingleResult());
                                 Tablas tb_precio_udi_periodo = util2.busquedaTabla(em, "valor_udi", fecha_trabajo.substring(0, 6));
                                 Tablas tb_udis_permitido_tercero = util2.busquedaTabla(em, "bankingly_banca_movil", "max_udis_por_transferencia");//fecha_trabajo.substring(0, 7).replace("\\/", ""));
-                                 if (transactionOWN.getAmount() <= (Double.parseDouble(tb_precio_udi_periodo.getDato1()) * Double.parseDouble(tb_udis_permitido_tercero.getDato1()))) {
+                                if (transactionOWN.getAmount() <= (Double.parseDouble(tb_precio_udi_periodo.getDato1()) * Double.parseDouble(tb_udis_permitido_tercero.getDato1()))) {
                                     mensaje = validarPagoAPrestamos(identificadorTransferencia, transactionOWN.getDebitProductBankIdentifier(),
                                             transactionOWN.getAmount(),
                                             transactionOWN.getCreditProductBankIdentifier(),
@@ -2405,6 +2368,95 @@ public abstract class FacadeTransaction<T> {
         }
         return mensaje.toUpperCase();
 
+    }
+
+    public File construirHtmlVoucher(AuxiliaresD ad) throws FileNotFoundException {
+        //Leyendo el .txt con estructura del html
+        File fileTxt = new File(ruta() + "voucher.txt");
+        //El nombre que se le dara al html
+        String nombre_html = "voucher" + ad.getTransaccion().toString() + ad.getAuxiliaresDPK().getFecha().toString().replace("-", "").replace(":", "").replace(".", "");// =nombre_txt.replace(".txt",".html");
+        String html = ruta() + nombre_html + ".html";
+        File file_html = new File(html);
+
+        FileOutputStream fs = new FileOutputStream(file_html);
+        OutputStreamWriter out = new OutputStreamWriter(fs);
+        try {
+            FileReader fr = new FileReader(fileTxt);
+            BufferedReader br = new BufferedReader(fr);
+            String linea;
+            String linea_contenedor = "";
+
+            SimpleDateFormat sdf = new SimpleDateFormat("yyy-MM-dd HH:MM:ss");
+            String hoy = sdf.format(new Date());
+
+            String mov = "";
+
+            if (ad.getCargoabono() == 0) {
+                mov = "Retiro";
+            } else {
+                mov = "Deposito";
+            }
+            String buscar_origen = "SELECT * FROM origenes WHERE matriz=0";
+            Query bus_origen = AbstractFacade.conexion().createNativeQuery(buscar_origen, Origenes.class);
+            Origenes origen = (Origenes) bus_origen.getSingleResult();
+            //Leyendo el txt
+            while ((linea = br.readLine()) != null) {
+                if (linea.contains("@@direccion@@")) {
+                    linea = linea.replace("@@direccion@@", origen.getNombre());
+                } else if (linea.contains("/usr/local/saicoop/img_caratula_ahorros")) {
+                    linea = linea.replace("/usr/local/saicoop/img_caratula_ahorros/", ruta());
+                    System.out.println("linea:" + linea);
+                } else if (linea.contains("@@opa@@")) {
+                    linea = linea.replace("@@opa@@", ad.getAuxiliaresDPK().getIdorigenp() + "-" + ad.getAuxiliaresDPK().getIdproducto() + "-" + ad.getAuxiliaresDPK().getIdauxiliar());
+                } else if (linea.contains("@@tipoMov@@")) {
+                    linea = linea.replace("@@tipoMov@@", mov);
+                } else if (linea.contains("@@fecha@@")) {
+                    linea = linea.replace("@@fecha@@", ad.getAuxiliaresDPK().getFecha().toString().substring(0, 19));
+                } else if (linea.contains("@@monto@@")) {
+                    linea = linea.replace("@@monto@@", "$" + ad.getMonto().toString());
+                } else if (linea.contains("@@saldoec@@")) {
+                    linea = linea.replace("@@saldoec@@", "$" + ad.getSaldoec().toString());
+                } else if (linea.contains("@@ticket@@")) {
+                    linea = linea.replace("@@ticket@@", ad.getTransaccion().toString());
+                } else if (linea.contains("@@hoy@@")) {
+                    linea = linea.replace("@@hoy@@", hoy);
+                }
+
+                out.write(linea);
+            }
+            out.close();
+        } catch (Exception e) {
+            System.out.println("Excepcion leyendo txt" + ": " + e.getMessage());
+        }
+        return file_html;
+    }
+
+    public boolean crearPDF(String ruta, String nombreDelHTMLAConvertir) {
+        try {
+            // ruta donde esta el html a convertir
+            String ficheroHTML = ruta + nombreDelHTMLAConvertir;
+            String url = new File(ficheroHTML).toURI().toURL().toString();
+            // ruta donde se almacenara el pdf y que nombre se le data
+            String ficheroPDF = ruta + nombreDelHTMLAConvertir.replace(".html", ".pdf");
+            File htmlSource = new File(ficheroHTML);
+            File pdfDest = new File(ficheroPDF);
+            // pdfHTML specific code
+            ConverterProperties converterProperties = new ConverterProperties();
+            HtmlConverter.convertToPdf(new FileInputStream(htmlSource), new FileOutputStream(pdfDest),
+                    converterProperties);
+            return true;
+        } catch (Exception e) {
+            System.out.println("Error al crear PDF:" + e.getMessage());
+            return false;
+        }
+
+    }
+
+    public static String ruta() {
+        String home = System.getProperty("user.home");
+        String separador = System.getProperty("file.separator");
+        String actualRuta = home + separador + "Banca" + separador + "voucher" + separador;
+        return actualRuta;
     }
 
 }

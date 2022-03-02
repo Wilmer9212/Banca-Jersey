@@ -132,7 +132,7 @@ public class LoanResources {
     }
 
     @POST
-    @Path("/fsfjfsfjfjsFees")
+    @Path("/Fees")
     @Consumes({MediaType.APPLICATION_JSON})
     @Produces({MediaType.APPLICATION_JSON})
     public Response loanFees(String cadena) {
@@ -148,12 +148,13 @@ public class LoanResources {
         }
         try {
             String order = "";
-            
+            int ChannelId = 0;
             try {
                 JSONObject jsonRecibido = new JSONObject(cadena);
                 productBankIdentifier = jsonRecibido.getString("productBankIdentifier");
                 feeStatus = jsonRecibido.getInt("feesStatus");
                 JSONObject json = jsonRecibido.getJSONObject("paging");
+                ChannelId = jsonRecibido.getInt("ChannelId");
                 if (!json.toString().contains("null")) {
                     pageSize = json.getInt("pageSize");
                     pageStartIndex = json.getInt("pageStartIndex");
@@ -161,14 +162,6 @@ public class LoanResources {
                 }else{
                     pageSize = 10;
                     pageStartIndex = 0;
-                }
-
-                int o = Integer.parseInt(productBankIdentifier.substring(0, 6));
-                int p = Integer.parseInt(productBankIdentifier.substring(6, 11));
-                int a = Integer.parseInt(productBankIdentifier.substring(11, 19));
-                if (dao.tipoproducto(p) != 2) {
-                    Error.put("Error", "Producto no valido para LOANS");
-                    return Response.status(Response.Status.BAD_REQUEST).entity(Error).build();
                 }
             } catch (Exception e) {
                 Error.put("Error", "Error en parametros JSON");
@@ -182,18 +175,13 @@ public class LoanResources {
             }
             System.out.println("loanFeeStatus:" + feeStatus + ",pageSize:" + pageSize + ",pageStartIndex:" + pageStartIndex + ",orderByField:" + order);
             try {
-                List<LoanFee> loan = dao.LoanFees(productBankIdentifier, feeStatus, pageSize, pageStartIndex, order);
+                List<LoanFee> loan = dao.LoanFees(productBankIdentifier, feeStatus, pageSize, pageStartIndex, order,ChannelId);
                 JsonObject j = new JsonObject();
-
-                int t = dao.contadorGeneral(productBankIdentifier, 1, feeStatus);
-                if (t > 0) {
+                 int t = dao.contadorFeesPayments(productBankIdentifier,1,feeStatus);
                     j.put("Fees", loan);
-                    j.put("LoanFeesCount", t);
-                } else {
-                    j.put("Error", "No se encontraron cuotas para el estatus:" + feeStatus);
-                }
-
+                    j.put("LoanFeesCount", t);                
                 return Response.status(Response.Status.OK).entity(j).build();
+                
             } catch (Exception e) {
                 Error.put("Error", "SOCIOS NO ENCONTRADOS");
                 System.out.println("Error al convertir cadena a JSON:" + e.getMessage());
@@ -259,14 +247,14 @@ public class LoanResources {
     }
 
     @POST
-    @Path("/sdsPaydddmentssssssssss")
+    @Path("/Payments")
     @Consumes({MediaType.APPLICATION_JSON})
     @Produces({MediaType.APPLICATION_JSON})
     public Response loanPayments(String cadena) {
         System.out.println("Cadena:" + cadena);
         String productBankIdentifier = "";
         JsonObject Error = new JsonObject();
-        int pageSize = 0, pageStartIndex = 0;
+        int pageSize = 0, pageStartIndex = 0,channelId = 0;
         LoanDAO dao = new LoanDAO();
         if (!dao.actividad_horario()) {
             Error.put("ERROR", "VERIFIQUE SU HORARIO DE ACTIVIDAD FECHA,HORA O CONTACTE A SU PROVEEEDOR");
@@ -276,6 +264,7 @@ public class LoanResources {
             JSONObject jsonRecibido = new JSONObject(cadena);
             productBankIdentifier = jsonRecibido.getString("productBankIdentifier");
             JSONObject paging = jsonRecibido.getJSONObject("paging");
+            channelId = jsonRecibido.getInt("ChannelId");
             if(!paging.toString().contains("null")){
                 pageSize = paging.getInt("pageSize");
                 pageStartIndex = paging.getInt("pageStartIndex");
@@ -299,11 +288,11 @@ public class LoanResources {
         }
 
         try {
-            List<LoanPayment> ListPayment = dao.loanPayments(productBankIdentifier, pageSize, pageStartIndex);
+            List<LoanPayment> ListPayment = dao.loanPayments(productBankIdentifier, pageSize, pageStartIndex,channelId);
             JsonObject j = new JsonObject();
-            int t = dao.contadorGeneral(productBankIdentifier, 2, 0);
-            j.put("Payments", 0);;//ListPayment);
-            j.put("LoanPaymentsCount", dao.contador_registros(productBankIdentifier));
+            int t = dao.contadorFeesPayments(productBankIdentifier,2,0);
+            j.put("Payments", ListPayment);
+            j.put("LoanPaymentsCount", t);
             return Response.status(Response.Status.OK).entity(j).build();
         } catch (Exception e) {
             Error.put("Error", "SOCIOS NO ENCONTRADOS");
